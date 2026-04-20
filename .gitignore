@@ -1,0 +1,44 @@
+# ============================================================================
+# .gitignore — files Git should never track
+# ============================================================================
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# --- Node ---
+node_modules/
+dist/
+.vite/
+
+# --- Environment / secrets ---
+# NEVER commit .env files — they hold API keys
+.env
+.env.local
+.env.production
+
+# --- Database files (SQLite) ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Uploaded user data ---
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+
+# --- Logs ---
+*.log
+npm-debug.log*
