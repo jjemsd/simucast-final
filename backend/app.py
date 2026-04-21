@@ -65,7 +65,7 @@ def create_app():
     # Our frontend runs on localhost:5173 (Vite's default port).
     # Without this, the browser blocks API calls from there to localhost:5000.
     # supports_credentials=True lets us send session cookies.
-    CORS(app, supports_credentials=True, origins=["http://localhost:5173"])
+    CORS(app, supports_credentials=True, origins=os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173").split(","))
 
     # --- Step 6: Set up Flask-Login ---
     login_manager = LoginManager()
