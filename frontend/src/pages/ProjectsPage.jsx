@@ -15,10 +15,11 @@ import {
   createProject,
   updateProject,
   deleteProject,
+  getProjectFiles,
 } from '../api/projects.js'
 import NewProjectModal from '../components/NewProjectModal.jsx'
 import RenameModal from '../components/RenameModal.jsx'
-import ConfirmModal from '../components/ConfirmModal.jsx'
+import DeleteProjectModal from '../components/DeleteProjectModal.jsx'
 
 export default function ProjectsPage() {
   const navigate = useNavigate()
@@ -31,6 +32,10 @@ export default function ProjectsPage() {
   const [newOpen, setNewOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  // Files attached to the project we're about to delete, including a
+  // shared_with_other_projects count per file. Loaded lazily when the
+  // delete modal opens.
+  const [deleteTargetFiles, setDeleteTargetFiles] = useState([])
 
   // Which project's action menu is open (the "⋯" button on a card).
   const [menuOpenFor, setMenuOpenFor] = useState(null)
@@ -57,9 +62,23 @@ export default function ProjectsPage() {
     reload()
   }
 
-  async function handleDelete() {
-    await deleteProject(deleteTarget.id)
+  async function handleDelete({ deleteFiles }) {
+    await deleteProject(deleteTarget.id, { deleteFiles })
     reload()
+  }
+
+  // Called when the user opens the delete modal — fetches the per-file
+  // usage info so the modal can show accurate "kept/deleted" counts.
+  async function openDelete(project) {
+    setMenuOpenFor(null)
+    setDeleteTarget(project)
+    try {
+      const files = await getProjectFiles(project.id)
+      setDeleteTargetFiles(files)
+    } catch (err) {
+      console.error(err)
+      setDeleteTargetFiles([])
+    }
   }
 
   // Filter projects client-side by the search box. Case-insensitive.
@@ -136,10 +155,7 @@ export default function ProjectsPage() {
                 setMenuOpenFor(null)
                 setRenameTarget(p)
               }}
-              onDelete={() => {
-                setMenuOpenFor(null)
-                setDeleteTarget(p)
-              }}
+              onDelete={() => openDelete(p)}
             />
           ))}
         </div>
@@ -159,19 +175,14 @@ export default function ProjectsPage() {
         onSubmit={handleRename}
       />
 
-      <ConfirmModal
+      <DeleteProjectModal
         open={deleteTarget !== null}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete project?"
-        message={
-          <span>
-            This will permanently delete <strong>{deleteTarget?.name}</strong>{' '}
-            and all of its datasets, analyses, and timeline steps. This cannot
-            be undone.
-          </span>
-        }
-        confirmLabel="Delete project"
-        danger
+        onClose={() => {
+          setDeleteTarget(null)
+          setDeleteTargetFiles([])
+        }}
+        project={deleteTarget}
+        files={deleteTargetFiles}
         onConfirm={handleDelete}
       />
     </div>

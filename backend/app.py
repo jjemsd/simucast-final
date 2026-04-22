@@ -38,6 +38,7 @@ from routes.whatif import bp as whatif_bp
 from routes.history import bp as history_bp
 from routes.ai import bp as ai_bp
 from routes.reports import bp as reports_bp
+from routes.files import bp as files_bp
 
 
 def create_app():
@@ -121,6 +122,7 @@ def create_app():
     app.register_blueprint(history_bp, url_prefix="/api/history")
     app.register_blueprint(ai_bp, url_prefix="/api/ai")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
+    app.register_blueprint(files_bp, url_prefix="/api/files")
 
     # --- Simple health check route ---
     # Useful for testing the server is alive: curl localhost:5000/

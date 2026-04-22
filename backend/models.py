@@ -46,6 +46,11 @@ class User(db.Model, UserMixin):
         "Project", backref="user", lazy=True, cascade="all, delete"
     )
 
+    # One user has many uploaded files (independent of projects).
+    files = db.relationship(
+        "File", backref="user", lazy=True, cascade="all, delete"
+    )
+
     # --- Helper methods ---
     # These aren't columns — they're just Python methods on this class.
 
@@ -99,18 +104,20 @@ class Project(db.Model):
         }
 
 
-class Dataset(db.Model):
+class File(db.Model):
     """
-    A dataset file attached to a project.
+    A file uploaded by a user. Phase B: Files are user-owned and independent
+    from projects. The same File can back multiple Datasets (one per project
+    that uses it).
 
-    We store the file on disk and keep a reference (filename, path, metadata) here.
-    We also cache column types and row count so we don't re-parse the file every time.
+    We store the actual bytes on disk at `storage_path` and cache metadata
+    (rows, columns, dtypes) so we don't re-parse the file every time.
     """
 
-    __tablename__ = "datasets"
+    __tablename__ = "files"
 
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
 
     # Original filename the user uploaded (e.g. "titanic.csv")
     original_filename = db.Column(db.String(200), nullable=False)
@@ -118,12 +125,60 @@ class Dataset(db.Model):
     # Where we stored it on disk (a safe, unique filename)
     storage_path = db.Column(db.String(500), nullable=False)
 
-    # Cached metadata so we don't re-read the file every time
+    # Cached metadata
     row_count = db.Column(db.Integer)
     column_count = db.Column(db.Integer)
 
     # JSON string of column names and types, e.g. '{"age": "float", "name": "string"}'
-    # We store as string because SQLite doesn't have a JSON column type.
+    columns_info = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # One file can be attached to many datasets (one per project using it).
+    # We DO NOT cascade-delete: deleting a File should be blocked or
+    # explicitly cleaning up its datasets, and deleting a Dataset should
+    # NOT remove the underlying File.
+    datasets = db.relationship("Dataset", backref="file", lazy=True)
+
+    def to_dict(self, project_count=None):
+        import json
+        d = {
+            "id": self.id,
+            "original_filename": self.original_filename,
+            "row_count": self.row_count,
+            "column_count": self.column_count,
+            "columns_info": json.loads(self.columns_info) if self.columns_info else {},
+            "created_at": self.created_at.isoformat(),
+        }
+        if project_count is not None:
+            d["project_count"] = project_count
+        return d
+
+
+class Dataset(db.Model):
+    """
+    A dataset inside a project. Tied to a File (Phase B) which holds the
+    actual bytes and metadata. For backward compatibility we still keep
+    the file columns here; they mirror File during the migration.
+    """
+
+    __tablename__ = "datasets"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=False)
+
+    # Phase B: link to the File that holds the actual bytes.
+    # Nullable so the migration can add the column to existing rows before
+    # backfill runs. run_migrations() fills it in at startup.
+    file_id = db.Column(db.Integer, db.ForeignKey("files.id"), nullable=True, index=True)
+
+    # --- Legacy (mirror of File) ---
+    # These still exist for older code paths. New code should read from
+    # self.file.* instead when possible.
+    original_filename = db.Column(db.String(200), nullable=False)
+    storage_path = db.Column(db.String(500), nullable=False)
+    row_count = db.Column(db.Integer)
+    column_count = db.Column(db.Integer)
     columns_info = db.Column(db.Text)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -132,6 +187,7 @@ class Dataset(db.Model):
         import json
         return {
             "id": self.id,
+            "file_id": self.file_id,
             "original_filename": self.original_filename,
             "row_count": self.row_count,
             "column_count": self.column_count,
