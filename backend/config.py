@@ -38,10 +38,27 @@ class Config:
     DEBUG = os.environ.get("FLASK_DEBUG", "False") == "True"
 
     # --- Database ---
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///simucast.db")
+    # Render's managed Postgres exposes DATABASE_URL with the legacy
+    # "postgres://" scheme; SQLAlchemy 1.4+ requires "postgresql://".
+    _db_url = os.environ.get("DATABASE_URL", "sqlite:///simucast.db")
+    if _db_url.startswith("postgres://"):
+        _db_url = _db_url.replace("postgres://", "postgresql://", 1)
+    SQLALCHEMY_DATABASE_URI = _db_url
 
     # Turn off a SQLAlchemy feature we don't need (it spams warnings otherwise).
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+    # Recycle pooled connections so Render's idle-timeout doesn't kill them.
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
+
+    # --- Sessions / cookies ---
+    # In production the frontend (static site) and backend (web service) live
+    # on different .onrender.com subdomains, so session cookies must be
+    # SameSite=None and Secure for the browser to send them cross-site.
+    _is_prod = os.environ.get("FLASK_ENV", "").lower() == "production" or os.environ.get("RENDER") == "true"
+    SESSION_COOKIE_SAMESITE = "None" if _is_prod else "Lax"
+    SESSION_COOKIE_SECURE = _is_prod
+    SESSION_COOKIE_HTTPONLY = True
 
     # --- Uploads ---
     # Max upload size in BYTES (Flask uses bytes). We read MB from env

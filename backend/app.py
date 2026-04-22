@@ -16,6 +16,7 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_login import LoginManager
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from database import db, init_db
@@ -54,6 +55,11 @@ def create_app():
     # from_object() copies all uppercase attributes from Config into app.config
     app.config.from_object(Config)
 
+    # On Render the app sits behind a TLS-terminating proxy. ProxyFix reads
+    # X-Forwarded-* headers so request.is_secure / url scheme are correct
+    # and Secure cookies are set reliably.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     # --- Step 3: Make sure uploads folder exists ---
     import os
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -65,7 +71,17 @@ def create_app():
     # Our frontend runs on localhost:5173 (Vite's default port).
     # Without this, the browser blocks API calls from there to localhost:5000.
     # supports_credentials=True lets us send session cookies.
-    CORS(app, supports_credentials=True, origins=os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173").split(","))
+    # Render's blueprint exposes hostnames without a scheme; prepend https://
+    # so the CORS allowlist matches what browsers actually send.
+    def _normalize_origin(o: str) -> str:
+        o = o.strip()
+        if o and not o.startswith("http://") and not o.startswith("https://"):
+            o = "https://" + o
+        return o
+
+    raw_origins = os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173").split(",")
+    origins = [_normalize_origin(o) for o in raw_origins if o.strip()]
+    CORS(app, supports_credentials=True, origins=origins)
 
     # --- Step 6: Set up Flask-Login ---
     login_manager = LoginManager()
