@@ -16,7 +16,7 @@ import uuid
 import pandas as pd
 
 from database import db
-from models import Dataset
+from models import Dataset, File
 
 
 # --- File formats we can read ---
@@ -30,25 +30,25 @@ SUPPORTED_FORMATS = {
 }
 
 
-def save_and_parse_upload(project, file):
+def save_and_parse_file(user, uploaded):
     """
-    Save an uploaded file to disk and create a Dataset row in the database.
+    Save an uploaded file to disk, parse it to extract metadata, and create
+    a File row. Does NOT create a Dataset — that happens when the file is
+    used in a project.
 
     Arguments:
-        project: the Project this dataset belongs to (a Project model instance)
-        file: the uploaded file (a Werkzeug FileStorage object from Flask)
+        user: the User this file belongs to
+        uploaded: the Werkzeug FileStorage object from request.files
 
     Returns:
-        Dataset: the newly created Dataset model instance
+        File: the newly created File model instance
 
     Raises:
-        ValueError: if the file format isn't supported or the file is unreadable
+        ValueError: if the format isn't supported or the file is unreadable
     """
     from flask import current_app
 
-    # --- Figure out the file extension ---
-    original_name = file.filename
-    # os.path.splitext("data.csv") returns ("data", ".csv")
+    original_name = uploaded.filename
     _, ext = os.path.splitext(original_name.lower())
 
     if ext not in SUPPORTED_FORMATS:
@@ -57,42 +57,70 @@ def save_and_parse_upload(project, file):
             f"Supported: {', '.join(SUPPORTED_FORMATS.keys())}"
         )
 
-    # --- Generate a unique storage filename ---
-    # We don't save with the original filename because two users might both
-    # upload "data.csv" and overwrite each other. UUIDs guarantee uniqueness.
+    # Unique on-disk name so two users uploading "data.csv" don't collide.
     safe_name = f"{uuid.uuid4().hex}{ext}"
     upload_folder = current_app.config["UPLOAD_FOLDER"]
     storage_path = os.path.join(upload_folder, safe_name)
 
-    # --- Save the file to disk ---
-    file.save(storage_path)
+    uploaded.save(storage_path)
 
-    # --- Parse it with pandas to get metadata ---
+    # Parse to get row/col counts and dtypes.
     try:
         reader = SUPPORTED_FORMATS[ext]
         df = reader(storage_path)
     except Exception as e:
-        # If parsing fails, clean up the saved file
-        os.remove(storage_path)
+        # Clean up the saved bytes if parsing fails.
+        if os.path.exists(storage_path):
+            os.remove(storage_path)
         raise ValueError(f"Could not read file: {e}")
 
-    # --- Build column info: {"age": "float64", "name": "object", ...} ---
-    # df.dtypes is a pandas Series mapping column names to their data types
     columns_info = {col: str(df[col].dtype) for col in df.columns}
 
-    # --- Create the Dataset row ---
-    dataset = Dataset(
-        project_id=project.id,
+    file = File(
+        user_id=user.id,
         original_filename=original_name,
         storage_path=storage_path,
         row_count=len(df),
         column_count=len(df.columns),
-        columns_info=json.dumps(columns_info),  # Convert dict to string for storage
+        columns_info=json.dumps(columns_info),
+    )
+    db.session.add(file)
+    db.session.commit()
+    return file
+
+
+def attach_file_to_project(project, file):
+    """
+    Create a Dataset row that ties an existing File to a Project.
+
+    Both legacy (mirror) columns and the new file_id FK are populated so
+    code that still reads Dataset.* directly keeps working.
+    """
+    dataset = Dataset(
+        project_id=project.id,
+        file_id=file.id,
+        original_filename=file.original_filename,
+        storage_path=file.storage_path,
+        row_count=file.row_count,
+        column_count=file.column_count,
+        columns_info=file.columns_info,
     )
     db.session.add(dataset)
     db.session.commit()
-
     return dataset
+
+
+def save_and_parse_upload(project, file):
+    """
+    Compatibility wrapper: takes an upload coming into a project (the old
+    /api/data/<project>/upload flow) and creates BOTH a File row and a
+    Dataset row, returning the Dataset.
+
+    New code should call save_and_parse_file() + attach_file_to_project()
+    separately — that path lets a single File back multiple projects.
+    """
+    uploaded_file = save_and_parse_file(project.user, file)
+    return attach_file_to_project(project, uploaded_file)
 
 
 def load_dataframe(dataset):

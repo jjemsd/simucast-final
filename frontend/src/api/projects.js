@@ -28,6 +28,17 @@ export async function updateProject(projectId, patch) {
   return data.project
 }
 
-export async function deleteProject(projectId) {
-  await client.delete(`/api/projects/${projectId}`)
+// Preview of what a project delete would affect — each file includes
+// shared_with_other_projects so the UI can warn the user.
+export async function getProjectFiles(projectId) {
+  const { data } = await client.get(`/api/projects/${projectId}/files`)
+  return data.files
+}
+
+// Delete a project. Pass { deleteFiles: true } to also remove any files
+// that aren't shared with other projects.
+export async function deleteProject(projectId, { deleteFiles = false } = {}) {
+  const qs = deleteFiles ? '?delete_files=1' : ''
+  const { data } = await client.delete(`/api/projects/${projectId}${qs}`)
+  return data  // { ok, deleted_files }
 }

@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useOutletContext, Link } from 'react-router-dom'
 import { listProjects, createProject } from '../api/projects.js'
-import { listAllDatasets } from '../api/data.js'
+import { listFiles } from '../api/files.js'
 import NewProjectModal from '../components/NewProjectModal.jsx'
 
 const MAX_RECENT = 6
@@ -28,10 +28,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     // Load both lists in parallel. We only display the first MAX_RECENT.
-    Promise.all([listProjects(), listAllDatasets()])
-      .then(([p, d]) => {
+    Promise.all([listProjects(), listFiles()])
+      .then(([p, f]) => {
         setProjects(p)
-        setFiles(d)
+        setFiles(f)
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -105,7 +105,7 @@ export default function DashboardPage() {
             <FileCard
               key={f.id}
               file={f}
-              onClick={() => navigate(`/project/${f.project_id}`)}
+              onClick={() => navigate('/files')}
             />
           ))}
         </div>
@@ -193,6 +193,10 @@ function ProjectCard({ project, onClick }) {
 }
 
 function FileCard({ file, onClick }) {
+  const usage =
+    file.project_count === 0
+      ? 'Not used yet'
+      : `Used in ${file.project_count} project${file.project_count === 1 ? '' : 's'}`
   return (
     <div
       onClick={onClick}
@@ -205,7 +209,7 @@ function FileCard({ file, onClick }) {
         {file.row_count} rows · {file.column_count} columns
       </div>
       <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-        in {file.project_name}
+        {usage}
       </div>
     </div>
   )
