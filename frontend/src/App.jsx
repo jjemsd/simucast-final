@@ -1,11 +1,19 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
+
 import LoginPage from './pages/LoginPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+import ProjectsPage from './pages/ProjectsPage.jsx'
+import FilesPage from './pages/FilesPage.jsx'
+import SettingsPage from './pages/SettingsPage.jsx'
 import ProjectPage from './pages/ProjectPage.jsx'
+
+import AppShell from './layouts/AppShell.jsx'
+import { UserPrefsProvider } from './contexts/UserPrefsContext.jsx'
 import { getCurrentUser } from './api/auth.js'
 
 export default function App() {
+  // `undefined` = still checking, `null` = not logged in, object = logged in
   const [user, setUser] = useState(undefined)
 
   useEffect(() => {
@@ -22,20 +30,44 @@ export default function App() {
     )
   }
 
+  function handleLogout() {
+    setUser(null)
+  }
+
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/" /> : <LoginPage onLogin={setUser} />}
-      />
-      <Route
-        path="/"
-        element={user ? <DashboardPage user={user} onLogout={() => setUser(null)} /> : <Navigate to="/login" />}
-      />
-      <Route
-        path="/project/:projectId"
-        element={user ? <ProjectPage user={user} /> : <Navigate to="/login" />}
-      />
-    </Routes>
+    <UserPrefsProvider user={user}>
+      <Routes>
+        {/* Public route */}
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/" /> : <LoginPage onLogin={setUser} />}
+        />
+
+        {/* App shell — wraps the main navigation pages */}
+        <Route
+          element={
+            user ? (
+              <AppShell user={user} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        >
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/files" element={<FilesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+
+        {/* Project workspace — full-screen, no shell */}
+        <Route
+          path="/project/:projectId"
+          element={user ? <ProjectPage user={user} /> : <Navigate to="/login" />}
+        />
+
+        {/* Anything else — bounce to the dashboard (or login) */}
+        <Route path="*" element={<Navigate to={user ? '/' : '/login'} />} />
+      </Routes>
+    </UserPrefsProvider>
   )
 }

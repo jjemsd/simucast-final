@@ -1,94 +1,92 @@
-# TODO — UX / data-view improvements
+# TODO
 
-Captured 2026-04-22. Work on these in a future session.
+Phase A (new app shell, Dashboard/Projects/Files/Settings, dark mode,
+avatar, modal-based project create/rename/delete) — **DONE**.
 
-## 1. Replace `window.prompt()` with a real modal for project creation
+Everything below needs future sessions.
 
-Currently clicking "Create new project" on the Dashboard fires a native
-`window.prompt("Project name?")` — that's where the "simucast-web.onrender.com
-says" dialog comes from.
+## Phase B — Files as a first-class resource
 
-- File: `frontend/src/pages/DashboardPage.jsx` (uses `createProject` from
-  `api/projects.js`)
-- Want: a React modal component with a labeled input, Create / Cancel
-  buttons, validation (non-empty, reasonable max length), and
-  Esc-to-close / click-outside-to-close.
-- While we're at it, audit the codebase for any other `prompt()` /
-  `confirm()` / `alert()` calls and replace with modals/toasts for
-  consistency.
+Today every uploaded file is pinned to exactly one project via
+`Dataset.project_id`. To make Files a real standalone resource:
 
-## 2. Resizable sidebar + larger text
+1. New `File` table (id, user_id, original_filename, storage_path,
+   row_count, column_count, columns_info, created_at).
+2. `Dataset.file_id` FK (nullable during migration); a dataset within a
+   project references its source file. Same file can back multiple
+   projects.
+3. Set up **Alembic** for migrations first — `db.create_all()` won't
+   add columns to existing tables in production.
+4. New routes:
+   - `POST /api/files` — upload (no project required)
+   - `GET /api/files/:id` — metadata
+   - `GET /api/files/:id/preview` — paged rows
+   - `DELETE /api/files/:id` — only if unused by any project
+   - `POST /api/files/:id/new-project` — create a project seeded from
+     this file
+5. Files page gets: upload button, delete with "used in N projects"
+   check, rename, "used in" badge.
+6. Project delete: detect shared files, warn with "X files are still
+   used by other projects, they won't be deleted" message.
+7. Sync avatar + dark mode preference from localStorage to `User`
+   table (column `avatar`, column `theme`). Needs a migration.
 
-Sidebar in the project shell is a fixed narrow column and the text is too
-small to read comfortably.
+## Data view / project workspace improvements
 
-- File: `frontend/src/pages/ProjectPage.jsx` (and whatever renders the
-  nav items — probably a small sub-component)
-- Want:
-  - Drag handle on the sidebar's right edge that resizes width; persist
-    chosen width in `localStorage`.
-  - Sensible min / max widths (e.g. 160px … 480px).
-  - Bump base font size for nav items (current ~12px is too tight).
-  - Bump global base text size for readability (check `index.css` /
-    Tailwind config).
+Carried over from earlier planning. Independent of Files work.
 
-## 3. Data view: table-only scroll + column header actions + hover stats
+### 1. Resizable sidebar + larger text (project workspace)
 
-Today when a dataset has many columns the whole page scrolls horizontally
-instead of just the table.
+- `frontend/src/components/IconSidebar.jsx` is currently fixed-width
+  icons only (60px column). Either widen it and show labels, or add a
+  drag handle.
+- Persist chosen width in `localStorage`.
+- Bump base font size — current 11–12px is too small.
 
-- File: `frontend/src/views/DataView.jsx` + any `DataTable` child
-- Scrolling:
-  - Outer layout should NOT scroll horizontally.
-  - The data table container is the only thing that scrolls (both X and
-    Y); sticky header row; sticky first column ideally.
-- Column header dropdown (per column):
-  - Change data type: `str` → `int` / `float` / `date` / `bool`.
-  - Date format picker when type is `date` (ISO, MM/DD/YYYY, etc.).
+### 2. Data view: table-only scroll + column header actions + hover stats
+
+- File: `frontend/src/views/DataView.jsx`.
+- Scrolling: only the data table container scrolls (both X and Y);
+  sticky header row; sticky first column.
+- Per-column dropdown in the table header:
+  - Change data type (`str` ↔ `int` ↔ `float` ↔ `date` ↔ `bool`).
+  - Date format picker when type is `date`.
   - Drop / rename column.
-  - Conversion is best-effort: `"12345"` → int, `"123.45"` → float, etc.
-    Values that can't coerce get flagged as errors (don't throw away the
-    original — keep it so the user can still see what was there).
-  - Probably needs a new backend endpoint (or to extend
-    `/api/clean/:dataset/recode`) that returns a new dataset + step.
-- Column hover tooltip / popover:
-  - declared data type
+  - Conversion is best-effort; values that can't coerce get flagged
+    as errors.
+- Column hover popover:
+  - declared type
   - non-null count, null count
   - numeric: sum, mean, min, max, std
-  - error count = values that don't match the declared type
-  - categorical (low-cardinality text, e.g. Yes/No, Married/Single/…):
-    frequency table of each distinct value plus null count
-  - This should use a new backend endpoint like
-    `/api/data/:dataset/columns/:name/profile` that returns the full
-    profile so the frontend doesn't recompute on every hover. Cache on
-    the dataset after cleaning steps.
+  - error count
+  - categorical: frequency table + null count
+- Needs a new endpoint `GET /api/data/:dataset/columns/:name/profile`.
 
-## 4. Replace the "Columns" chip bar with an AI "Overview" panel
+### 3. Replace "Columns" chip bar with AI Overview
 
-The chip bar at the top of the Data view (column name + type per chip)
-adds little; what's useful is a summary of what's wrong with the
-dataset.
-
-- File: `frontend/src/views/DataView.jsx`
-- Remove: the existing "Columns" section.
-- Add: an "Overview" panel that calls a new AI endpoint (extend
-  `backend/routes/ai.py` + `backend/services/ai_service.py`) which takes
-  a dataset id and returns:
+- Remove the top "Columns" section.
+- Add an Overview panel that calls a new AI endpoint with the column
+  profiles from the previous task and returns:
   - total null / blank count
   - special characters / encoding issues
-  - datatype mismatches (e.g. mostly-numeric column with a few text
-    rows)
+  - datatype mismatches
   - probable errors per column
-  - suggested cleaning actions (human-readable, ideally with a link /
-    button that prefills the corresponding Clean tool)
-- The server probably wants to send Claude a compact summary of the
-  column profiles (from task 3) rather than the raw CSV, to keep tokens
-  low.
+  - suggested cleaning actions
 
-## Loose ordering suggestion
+### 4. Dark mode for project workspace
 
-1. Modal (#1) — small, isolated, good warm-up.
-2. Sidebar + text size (#2) — affects every screen, easy win.
-3. Column profiles + table scroll (#3) — biggest piece; profile
-   endpoint unlocks #4.
-4. AI Overview (#4) — depends on #3's profile data.
+- The new shell pages support dark mode. The project workspace
+  (DataView, CleanView, StatsView, TestsView, ModelView, WhatIfView,
+  ReportView, IconSidebar, AIChat, Timeline, DataTable, ChartCard,
+  StatCard, TopBar, SyntheticModal) still uses plain `bg-white` etc.
+- Pass: add `dark:` variants on backgrounds, borders, and text in
+  each view. No logic changes.
+
+## Nice-to-haves
+
+- Replace remaining `window.confirm()` calls (`ProjectPage.jsx` in
+  `handleRollback`, and anywhere else) with `ConfirmModal`.
+- Replace remaining `alert()` calls with a tiny toast component.
+- Loading skeletons on the Files and Projects pages match the
+  Dashboard.
+- Keyboard: ⌘K / Ctrl-K opens a "new project" / search palette.

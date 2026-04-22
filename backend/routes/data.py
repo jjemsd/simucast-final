@@ -7,7 +7,9 @@
 # The real work (reading CSVs, computing previews) lives in data_service.py.
 # ============================================================================
 
-from flask import Blueprint, request, jsonify
+import os
+
+from flask import Blueprint, request, jsonify, send_file
 from flask_login import login_required, current_user
 
 from database import db
@@ -15,6 +17,56 @@ from models import Project, Dataset, Step
 from services import data_service
 
 bp = Blueprint("data", __name__)
+
+
+@bp.route("/", methods=["GET"])
+@login_required
+def list_user_datasets():
+    """
+    GET /api/data/
+    Every dataset the current user has across all their projects.
+
+    Used by the Files page. Each row is annotated with the owning
+    project's id + name so the UI can link back into the workspace.
+    """
+    datasets = (
+        Dataset.query.join(Project)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Dataset.created_at.desc())
+        .all()
+    )
+
+    return jsonify({
+        "datasets": [
+            {
+                **d.to_dict(),
+                "project_id": d.project_id,
+                "project_name": d.project.name,
+            }
+            for d in datasets
+        ]
+    })
+
+
+@bp.route("/<int:dataset_id>/export", methods=["GET"])
+@login_required
+def export_dataset(dataset_id):
+    """
+    GET /api/data/<dataset_id>/export
+    Stream the underlying file back to the user as a download.
+    """
+    dataset = Dataset.query.get(dataset_id)
+    if not dataset or dataset.project.user_id != current_user.id:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    if not os.path.exists(dataset.storage_path):
+        return jsonify({"error": "File missing from server"}), 410
+
+    return send_file(
+        dataset.storage_path,
+        as_attachment=True,
+        download_name=dataset.original_filename,
+    )
 
 
 @bp.route("/<int:project_id>/upload", methods=["POST"])

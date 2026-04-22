@@ -24,3 +24,20 @@ export async function previewDataset(datasetId, page = 1, perPage = 50) {
   })
   return data
 }
+
+// Every dataset the current user owns (across all their projects).
+// Used by the Files page.
+export async function listAllDatasets() {
+  const { data } = await client.get('/api/data/')
+  return data.datasets
+}
+
+// Trigger a browser download of a dataset's underlying file.
+// Uses an anchor element so the browser handles the save dialog — we
+// don't try to pull the bytes into JS memory.
+export function exportDatasetUrl(datasetId) {
+  // Returns the absolute URL so <a download> works cross-origin.
+  // When the backend and frontend share an origin (dev), baseURL is ''.
+  const base = client.defaults.baseURL || ''
+  return `${base}/api/data/${datasetId}/export`
+}
