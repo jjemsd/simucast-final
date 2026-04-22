@@ -66,7 +66,7 @@ The repo ships with [`render.yaml`](./render.yaml), a Render Blueprint that prov
 - `simucast-api` — Flask API on gunicorn + a 1 GB persistent disk mounted at `backend/uploads/`
 - `simucast-web` — static Vite build with SPA-rewrite routing
 
-Services are wired together automatically: `DATABASE_URL`, `SECRET_KEY`, `FRONTEND_ORIGIN`, and `VITE_API_URL` are all injected via `fromDatabase` / `fromService`.
+`DATABASE_URL` and `SECRET_KEY` are wired automatically. Three variables need to be set manually in the dashboard after the first deploy — see step 3.
 
 ### One-time setup
 
@@ -77,10 +77,21 @@ Services are wired together automatically: `DATABASE_URL`, `SECRET_KEY`, `FRONTE
    - Render reads `render.yaml` and shows a plan. Click **Apply**.
    - First build takes ~5–10 min (pip install of pandas/scipy/sklearn is slow).
 
-3. **Set the Anthropic key**
-   Open the `simucast-api` service → **Environment** → set `ANTHROPIC_API_KEY`. It's marked `sync: false` in `render.yaml` so Render doesn't auto-generate it.
+3. **Set the three manual env vars**
 
-4. **Visit the frontend URL** (something like `https://simucast-web.onrender.com`). Sign up and you're in.
+   After both services are created, copy their public URLs from the top of each service page (they look like `https://simucast-api.onrender.com` and `https://simucast-web.onrender.com` — the actual suffix may differ if the name was already taken), then:
+
+   | Service | Variable | Value |
+   |---|---|---|
+   | `simucast-api` | `ANTHROPIC_API_KEY` | Your key from console.anthropic.com |
+   | `simucast-api` | `FRONTEND_ORIGIN` | The `simucast-web` public URL |
+   | `simucast-web` | `VITE_API_URL` | The `simucast-api` public URL |
+
+   > These can't be auto-wired: Render's `fromService.host` on a web service returns only the bare service name (e.g. `simucast-api`), not the full `*.onrender.com` domain, so the browser gets `ERR_NAME_NOT_RESOLVED` if you try. Setting them manually once is the fix.
+
+   Save each — `simucast-web` rebuilds (Vite inlines env vars at build time); `simucast-api` just redeploys.
+
+4. **Visit the `simucast-web` URL** and sign up.
 
 ### What gets deployed
 

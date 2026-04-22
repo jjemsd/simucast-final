@@ -1,179 +1,212 @@
 // ============================================================================
 // DashboardPage.jsx
 // ============================================================================
-// The home screen after login. Shows a greeting, lifetime stats, and
-// recent projects. Clicking a project opens ProjectPage.
+// The home screen after login. Shows:
+//   - a greeting
+//   - up to 6 recent projects as cards, with a "View all →" link
+//   - up to 6 recent files, with a "View all →" link
+//
+// The full project list lives on /projects, the full file list on /files.
 // ============================================================================
 
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useOutletContext, Link } from 'react-router-dom'
 import { listProjects, createProject } from '../api/projects.js'
-import { logout } from '../api/auth.js'
+import { listAllDatasets } from '../api/data.js'
+import NewProjectModal from '../components/NewProjectModal.jsx'
 
-export default function DashboardPage({ user, onLogout }) {
-  // --- State ---
-  const [projects, setProjects] = useState([])
-  const [loading, setLoading] = useState(true)
+const MAX_RECENT = 6
 
-  // useNavigate lets us programmatically change the URL
+export default function DashboardPage() {
+  const { user } = useOutletContext()
   const navigate = useNavigate()
 
-  // --- Load projects on mount ---
+  const [projects, setProjects] = useState([])
+  const [files, setFiles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [newOpen, setNewOpen] = useState(false)
+
   useEffect(() => {
-    listProjects()
-      .then(setProjects)
+    // Load both lists in parallel. We only display the first MAX_RECENT.
+    Promise.all([listProjects(), listAllDatasets()])
+      .then(([p, d]) => {
+        setProjects(p)
+        setFiles(d)
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [])
 
-  // --- Handler: create a new project ---
-  async function handleNewProject() {
-    const name = prompt('Project name?')  // simple for V1 — replace with modal later
-    if (!name?.trim()) return
-
-    try {
-      const project = await createProject(name.trim())
-      // Jump straight into the new project
-      navigate(`/project/${project.id}`)
-    } catch (err) {
-      alert('Could not create project: ' + (err.response?.data?.error || err.message))
-    }
+  async function handleCreate(name, description) {
+    const project = await createProject(name, description)
+    navigate(`/project/${project.id}`)
   }
 
-  // --- Handler: log out ---
-  async function handleLogout() {
-    await logout()
-    onLogout()
-  }
-
-  // --- Greeting based on time of day ---
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const firstName = user.name.split(' ')[0]
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="p-8 max-w-6xl mx-auto">
 
-      {/* Top bar */}
-      <header className="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-brand-500 text-white flex items-center justify-center text-xs font-medium">S</div>
-          <span className="text-sm font-medium">SimuCast</span>
+      {/* Greeting row */}
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+            {greeting}, {firstName}
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {new Date().toLocaleDateString(undefined, {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">{user.name}</span>
-          <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-medium">
-            {user.name.charAt(0).toUpperCase()}
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-gray-500 hover:text-gray-900"
-          >
-            Logout
-          </button>
-        </div>
-      </header>
-
-      <div className="grid" style={{ gridTemplateColumns: '150px 1fr' }}>
-
-        {/* Left sidebar — app-level nav (differs from project workspace) */}
-        <aside className="bg-white border-r border-gray-200 p-3 min-h-[calc(100vh-45px)]">
-          <nav className="flex flex-col gap-0.5">
-            <div className="px-2.5 py-2 text-xs font-medium bg-brand-100 text-brand-700 rounded-md">
-              Home
-            </div>
-            <div className="px-2.5 py-2 text-xs text-gray-500">Projects</div>
-            <div className="px-2.5 py-2 text-xs text-gray-500">Datasets</div>
-            <div className="px-2.5 py-2 text-xs text-gray-500">Templates</div>
-            <div className="px-2.5 py-2 text-xs text-gray-500">Settings</div>
-          </nav>
-        </aside>
-
-        {/* Main content */}
-        <main className="p-6">
-
-          {/* Greeting row */}
-          <div className="flex items-start justify-between mb-5">
-            <div>
-              <h1 className="text-lg font-medium">{greeting}, {user.name}</h1>
-              <p className="text-xs text-gray-500 mt-0.5">
-                {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-              </p>
-            </div>
-            <button
-              onClick={handleNewProject}
-              className="bg-brand-500 hover:bg-brand-600 text-white text-xs font-medium rounded-md px-3.5 py-1.5"
-            >
-              + New project
-            </button>
-          </div>
-
-          {/* Stat cards */}
-          <div className="grid grid-cols-4 gap-2.5 mb-6">
-            <StatCard label="Projects" value={projects.length} />
-            <StatCard label="Analyses" value="—" />
-            <StatCard label="Models" value="—" />
-            <StatCard label="Reports" value="—" />
-          </div>
-
-          {/* Recent projects */}
-          <h2 className="text-sm font-medium mb-2.5">Recent projects</h2>
-
-          {loading ? (
-            <div className="text-sm text-gray-400 py-8">Loading...</div>
-          ) : projects.length === 0 ? (
-            <div className="bg-white border border-dashed border-gray-300 rounded-md p-8 text-center">
-              <p className="text-sm text-gray-500 mb-2">No projects yet</p>
-              <button
-                onClick={handleNewProject}
-                className="text-sm text-brand-600 hover:underline"
-              >
-                + Create your first project
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2.5 mb-6">
-              {projects.map((p) => (
-                <div
-                  key={p.id}
-                  onClick={() => navigate(`/project/${p.id}`)}
-                  className="bg-white border border-gray-200 rounded-md p-3.5 cursor-pointer hover:border-brand-300"
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="text-sm font-medium">{p.name}</div>
-                    <div className="text-[10px] text-gray-400">
-                      {new Date(p.updated_at).toLocaleDateString()}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 line-clamp-1">
-                    {p.description || 'No description'}
-                  </p>
-                </div>
-              ))}
-
-              {/* Dashed "new project" card */}
-              <div
-                onClick={handleNewProject}
-                className="bg-white border border-dashed border-gray-300 rounded-md p-3.5 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-brand-400"
-              >
-                <span className="text-lg text-gray-400">+</span>
-                <span className="text-xs text-gray-500">Start a new project</span>
-              </div>
-            </div>
-          )}
-
-        </main>
+        <button
+          onClick={() => setNewOpen(true)}
+          className="bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-md px-4 py-2"
+        >
+          + New project
+        </button>
       </div>
+
+      {/* Recent projects */}
+      <SectionHeader title="Recent projects" linkTo="/projects" />
+      {loading ? (
+        <SkeletonCards />
+      ) : projects.length === 0 ? (
+        <EmptyCard
+          message="No projects yet"
+          actionLabel="+ Create your first project"
+          onAction={() => setNewOpen(true)}
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-10">
+          {projects.slice(0, MAX_RECENT).map((p) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onClick={() => navigate(`/project/${p.id}`)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Recent files */}
+      <SectionHeader title="Recent files" linkTo="/files" />
+      {loading ? (
+        <SkeletonCards />
+      ) : files.length === 0 ? (
+        <EmptyCard message="No files yet — upload one inside a project" />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {files.slice(0, MAX_RECENT).map((f) => (
+            <FileCard
+              key={f.id}
+              file={f}
+              onClick={() => navigate(`/project/${f.project_id}`)}
+            />
+          ))}
+        </div>
+      )}
+
+      <NewProjectModal
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        onCreate={handleCreate}
+      />
     </div>
   )
 }
 
 
-// --- Small helper component (scoped to this page) ---
-function StatCard({ label, value }) {
+// ============================================================================
+// Small helper components scoped to this page
+// ============================================================================
+
+function SectionHeader({ title, linkTo }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-md px-3 py-2.5">
-      <div className="text-[11px] text-gray-500">{label}</div>
-      <div className="text-xl font-medium">{value}</div>
+    <div className="flex items-center justify-between mb-3">
+      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+        {title}
+      </h2>
+      <Link
+        to={linkTo}
+        className="text-sm text-brand-600 dark:text-brand-400 hover:underline"
+      >
+        View all →
+      </Link>
+    </div>
+  )
+}
+
+function SkeletonCards() {
+  // Three grey placeholder cards while the request is in flight.
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-10">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="h-24 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg animate-pulse"
+        />
+      ))}
+    </div>
+  )
+}
+
+function EmptyCard({ message, actionLabel, onAction }) {
+  return (
+    <div className="bg-white dark:bg-gray-900 border border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-8 text-center mb-10">
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">{message}</p>
+      {actionLabel && (
+        <button
+          onClick={onAction}
+          className="text-sm text-brand-600 dark:text-brand-400 hover:underline"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function ProjectCard({ project, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 cursor-pointer hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
+    >
+      <div className="flex justify-between items-start mb-1.5">
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+          {project.name}
+        </div>
+        <div className="text-xs text-gray-400 dark:text-gray-500 shrink-0 ml-2">
+          {new Date(project.updated_at).toLocaleDateString()}
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+        {project.description || 'No description'}
+      </p>
+    </div>
+  )
+}
+
+function FileCard({ file, onClick }) {
+  return (
+    <div
+      onClick={onClick}
+      className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 cursor-pointer hover:border-brand-400 dark:hover:border-brand-500 transition-colors"
+    >
+      <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate mb-1">
+        {file.original_filename}
+      </div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">
+        {file.row_count} rows · {file.column_count} columns
+      </div>
+      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+        in {file.project_name}
+      </div>
     </div>
   )
 }

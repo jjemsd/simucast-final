@@ -59,10 +59,11 @@ services:
           name: simucast-db
           property: connectionString
       - key: FRONTEND_ORIGIN
-        fromService:
-          type: web
-          name: simucast-web
-          property: host
+        # Set manually after first deploy to the simucast-web public URL,
+        # e.g. https://simucast-web.onrender.com. fromService.host on a
+        # web service returns only the bare service name, not the full
+        # *.onrender.com domain, so we can't auto-wire this.
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: MAX_UPLOAD_MB
@@ -85,7 +86,7 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: simucast-api
-          property: host
+        # Set manually after first deploy to the simucast-api public URL,
+        # e.g. https://simucast-api.onrender.com. Changing this requires
+        # a rebuild (Vite inlines env vars at build time).
+        sync: false

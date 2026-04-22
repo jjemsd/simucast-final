@@ -21,6 +21,13 @@ export async function getProject(projectId) {
   return data
 }
 
+export async function updateProject(projectId, patch) {
+  // patch is an object like { name: "New name" } or { description: "..." }.
+  // The backend ignores fields we don't send.
+  const { data } = await client.patch(`/api/projects/${projectId}`, patch)
+  return data.project
+}
+
 export async function deleteProject(projectId) {
   await client.delete(`/api/projects/${projectId}`)
 }

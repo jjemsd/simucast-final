@@ -15,6 +15,9 @@ export default {
     "./index.html",
     "./src/**/*.{js,jsx,ts,tsx}",
   ],
+  // "class" = dark mode turns on when the <html> element has class="dark".
+  // We toggle that class from UserPrefsContext.
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {

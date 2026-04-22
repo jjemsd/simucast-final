@@ -20,6 +20,19 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Dark mode base. Tailwind toggles `html.dark` via UserPrefsContext.
+   We only repaint what isn't covered by per-component `dark:` utilities. */
+html.dark, html.dark body, html.dark #root {
+  background: #0B1220;
+  color: #E5E7EB;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
 /* Thin scrollbars everywhere (optional nice-to-have) */
 ::-webkit-scrollbar {
   width: 8px;

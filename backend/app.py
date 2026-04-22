@@ -74,7 +74,9 @@ def create_app():
     # Render's blueprint exposes hostnames without a scheme; prepend https://
     # so the CORS allowlist matches what browsers actually send.
     def _normalize_origin(o: str) -> str:
-        o = o.strip()
+        # Strip whitespace and any trailing slash — browsers send the Origin
+        # header without one, and flask-cors does a strict string compare.
+        o = o.strip().rstrip("/")
         if o and not o.startswith("http://") and not o.startswith("https://"):
             o = "https://" + o
         return o

@@ -73,6 +73,35 @@ def get_project(project_id):
     })
 
 
+@bp.route("/<int:project_id>", methods=["PATCH"])
+@login_required
+def update_project(project_id):
+    """
+    PATCH /api/projects/<id>
+    Body: { "name": "...", "description": "..." }  (both optional)
+
+    Used by the Rename modal on the Projects page. Only touches the
+    fields that are actually provided in the request body.
+    """
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
+
+    data = request.json or {}
+
+    if "name" in data:
+        new_name = (data.get("name") or "").strip()
+        if not new_name:
+            return jsonify({"error": "Project name cannot be empty"}), 400
+        project.name = new_name
+
+    if "description" in data:
+        project.description = (data.get("description") or "").strip()
+
+    db.session.commit()
+    return jsonify({"project": project.to_dict()})
+
+
 @bp.route("/<int:project_id>", methods=["DELETE"])
 @login_required
 def delete_project(project_id):
