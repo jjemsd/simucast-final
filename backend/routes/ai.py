@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 
 from models import Dataset
-from services import ai_service
+from services import ai_service, data_service
 
 bp = Blueprint("ai", __name__)
 
@@ -68,6 +68,27 @@ def interpret():
 
     text = ai_service.interpret(analysis_type, result)
     return jsonify({"interpretation": text})
+
+
+@bp.route("/overview", methods=["GET"])
+@login_required
+def overview():
+    """
+    GET /api/ai/overview?dataset_id=42
+    AI-generated summary of dataset health + suggested next steps.
+    Uses the per-column profile as input so the prompt stays small.
+    """
+    dataset_id = request.args.get("dataset_id")
+    if not dataset_id:
+        return jsonify({"error": "dataset_id is required"}), 400
+
+    dataset = Dataset.query.get(dataset_id)
+    if not dataset or dataset.project.user_id != current_user.id:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    profile = data_service.build_profile(dataset)
+    result = ai_service.overview(dataset, profile)
+    return jsonify(result)
 
 
 @bp.route("/recommend_test", methods=["POST"])

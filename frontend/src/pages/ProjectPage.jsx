@@ -126,12 +126,15 @@ export default function ProjectPage() {
       </header>
 
       <div
-        className="grid min-h-[calc(100vh-45px)]"
-        style={{ gridTemplateColumns: aiCollapsed ? '60px 1fr 28px' : '60px 1fr 220px' }}
+        className="flex min-h-[calc(100vh-45px)]"
       >
         <IconSidebar activeModule={activeModule} onChange={setActiveModule} />
 
-        <main className="p-5">
+        {/* Main column — flex-1 so it takes whatever space is left after
+            the (resizable) sidebar and the AI chat claim theirs.
+            min-w-0 is critical: without it, wide tables force the
+            whole flex container to overflow horizontally. */}
+        <main className="flex-1 min-w-0 p-5 overflow-hidden">
           {activeModule === 'data' && (
             <DataView project={project} currentDataset={currentDataset} onUpload={refreshProject} />
           )}
@@ -155,11 +158,21 @@ export default function ProjectPage() {
           {activeModule === 'report' && <ReportView project={project} />}
         </main>
 
-        <AIChat
-          collapsed={aiCollapsed}
-          onToggle={() => setAiCollapsed(!aiCollapsed)}
-          datasetId={currentDataset?.id || null}
-        />
+        {/* AI chat occupies a fixed-width column on the right. Using
+            display:grid for the wrapper means the inner <aside>
+            stretches to fill both dimensions — same behavior it had
+            under the previous CSS Grid layout, without touching
+            AIChat itself. */}
+        <div
+          style={{ width: aiCollapsed ? 28 : 220 }}
+          className="shrink-0 grid"
+        >
+          <AIChat
+            collapsed={aiCollapsed}
+            onToggle={() => setAiCollapsed(!aiCollapsed)}
+            datasetId={currentDataset?.id || null}
+          />
+        </div>
       </div>
 
       <Modal

@@ -47,6 +47,30 @@ export async function deleteColumns(datasetId, columns) {
   return data
 }
 
+/** Rename one column on the current dataset. */
+export async function renameColumn(datasetId, oldName, newName) {
+  const { data } = await client.post(`/api/clean/${datasetId}/rename-column`, {
+    old_name: oldName,
+    new_name: newName,
+  })
+  return data
+}
+
+/**
+ * Convert one column to a different logical type.
+ *
+ * targetType: 'str' | 'int' | 'float' | 'date' | 'bool'
+ * dateFormat: optional strftime pattern when targetType === 'date'
+ */
+export async function convertColumnType(datasetId, column, targetType, dateFormat = null) {
+  const { data } = await client.post(`/api/clean/${datasetId}/convert-type`, {
+    column,
+    target_type: targetType,
+    date_format: dateFormat,
+  })
+  return data
+}
+
 /**
  * Remove exact duplicate rows.
  * subset: optional array of columns to check for duplicates. Omit for "all columns".

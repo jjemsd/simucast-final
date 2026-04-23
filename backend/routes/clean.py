@@ -111,6 +111,61 @@ def delete_columns(dataset_id):
     return jsonify({"dataset": new_dataset.to_dict(), "step": step.to_dict()}), 201
 
 
+@bp.route("/<int:dataset_id>/rename-column", methods=["POST"])
+@login_required
+def rename_column(dataset_id):
+    """
+    POST /api/clean/<dataset_id>/rename-column
+    Body: { "old_name": "Zip", "new_name": "zip_code" }
+    """
+    dataset, project = _get_dataset_and_project(dataset_id)
+    if not dataset:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    data = request.json or {}
+    old_name = (data.get("old_name") or "").strip()
+    new_name = (data.get("new_name") or "").strip()
+
+    if not old_name or not new_name:
+        return jsonify({"error": "old_name and new_name are required"}), 400
+
+    try:
+        new_dataset, step = clean_service.rename_column(project, dataset, old_name, new_name)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"dataset": new_dataset.to_dict(), "step": step.to_dict()}), 201
+
+
+@bp.route("/<int:dataset_id>/convert-type", methods=["POST"])
+@login_required
+def convert_type(dataset_id):
+    """
+    POST /api/clean/<dataset_id>/convert-type
+    Body: { "column": "age", "target_type": "int", "date_format": null }
+    """
+    dataset, project = _get_dataset_and_project(dataset_id)
+    if not dataset:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    data = request.json or {}
+    column = data.get("column")
+    target_type = data.get("target_type")
+    date_format = data.get("date_format")
+
+    if not column or not target_type:
+        return jsonify({"error": "column and target_type are required"}), 400
+
+    try:
+        new_dataset, step = clean_service.convert_column_type(
+            project, dataset, column, target_type, date_format=date_format
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify({"dataset": new_dataset.to_dict(), "step": step.to_dict()}), 201
+
+
 @bp.route("/<int:dataset_id>/deduplicate", methods=["POST"])
 @login_required
 def deduplicate(dataset_id):

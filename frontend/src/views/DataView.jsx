@@ -1,32 +1,52 @@
 // ============================================================================
-// DataView.jsx  —  WEEK 5 VERSION
+// DataView.jsx
 // ============================================================================
-// Changes from Week 1:
-//   - Added "Generate synthetic data" button next to the upload area
-//   - Added SyntheticModal integration
-//   - Button is always visible (even when no dataset yet) so users can start
-//     with a synthetic dataset instead of uploading
+// The Data tab inside the project workspace. Shows:
+//   - AI-generated Overview at the top (replaces the old "Columns" chip bar)
+//   - the data table with sticky header / sticky first column
+//   - column hover tooltips (type + stats) and a per-column action menu
+//     for rename / change type / delete
+//   - pagination controls below the table
+//
+// When no dataset exists yet, shows the upload / synthetic-data prompt.
 // ============================================================================
 
 import { useEffect, useState } from 'react'
-import { uploadFile, previewDataset } from '../api/data.js'
+import { uploadFile, previewDataset, getProfile } from '../api/data.js'
+import {
+  renameColumn,
+  convertColumnType,
+  deleteColumns,
+} from '../api/clean.js'
+
 import DataTable from '../components/DataTable.jsx'
 import SyntheticModal from '../components/SyntheticModal.jsx'
+import RenameModal from '../components/RenameModal.jsx'
+import ConfirmModal from '../components/ConfirmModal.jsx'
+import TypeConvertModal from '../components/TypeConvertModal.jsx'
+import AIOverview from '../components/AIOverview.jsx'
 
 
 export default function DataView({ project, currentDataset, onUpload }) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState(null)
+  const [profile, setProfile] = useState(null)
   const [page, setPage] = useState(1)
   const [loadingPreview, setLoadingPreview] = useState(false)
 
-  // --- NEW in Week 5: synthetic data modal state ---
   const [syntheticOpen, setSyntheticOpen] = useState(false)
 
+  // Which per-column modal is open (null = none). Each holds the column name.
+  const [renameCol, setRenameCol] = useState(null)
+  const [convertCol, setConvertCol] = useState(null)
+  const [deleteCol, setDeleteCol] = useState(null)
+
+  // --- Load preview + profile whenever the dataset or page changes ---
   useEffect(() => {
     if (!currentDataset) {
       setPreview(null)
+      setProfile(null)
       return
     }
     setLoadingPreview(true)
@@ -35,6 +55,15 @@ export default function DataView({ project, currentDataset, onUpload }) {
       .catch((err) => setError(err.response?.data?.error || err.message))
       .finally(() => setLoadingPreview(false))
   }, [currentDataset, page])
+
+  // Profile refetches on dataset change only (not on page change — it's
+  // the same across pages).
+  useEffect(() => {
+    if (!currentDataset) return
+    getProfile(currentDataset.id)
+      .then((p) => setProfile(p.columns || {}))
+      .catch(() => setProfile(null))
+  }, [currentDataset])
 
   async function handleFileChange(e) {
     const file = e.target.files[0]
@@ -54,11 +83,33 @@ export default function DataView({ project, currentDataset, onUpload }) {
   }
 
   function handleSyntheticGenerated() {
-    onUpload()     // same refresh flow as after a file upload
+    onUpload()
     setPage(1)
   }
 
-  // --- No dataset yet — show upload prompt + synthetic option ---
+  // --- Column-action dispatcher passed into DataTable ---
+  function handleColumnAction(colName, action) {
+    if (action === 'rename') setRenameCol(colName)
+    else if (action === 'convertType') setConvertCol(colName)
+    else if (action === 'delete') setDeleteCol(colName)
+  }
+
+  async function submitRename(newName) {
+    await renameColumn(currentDataset.id, renameCol, newName)
+    onUpload()
+  }
+
+  async function submitConvert({ targetType, dateFormat }) {
+    await convertColumnType(currentDataset.id, convertCol, targetType, dateFormat)
+    onUpload()
+  }
+
+  async function submitDelete() {
+    await deleteColumns(currentDataset.id, [deleteCol])
+    onUpload()
+  }
+
+  // --- No dataset yet — show upload prompt ---
   if (!currentDataset) {
     return (
       <>
@@ -111,65 +162,60 @@ export default function DataView({ project, currentDataset, onUpload }) {
     )
   }
 
-  // --- Dataset exists — show details + preview ---
+  // --- Dataset exists — full UI ---
   return (
-    <>
-      <div>
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <h1 className="text-base font-medium">Data</h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {currentDataset.original_filename} · {currentDataset.row_count} rows · {currentDataset.column_count} columns
-            </p>
-          </div>
-
-          {/* --- NEW in Week 5: Action buttons --- */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setSyntheticOpen(true)}
-              className="bg-white border border-gray-200 hover:border-brand-400 rounded-md px-3 py-1.5 text-xs text-brand-700 font-medium"
-            >
-              ✦ Generate synthetic
-            </button>
-            <label className="bg-white border border-gray-200 hover:border-brand-400 rounded-md px-3 py-1.5 text-xs text-gray-700 cursor-pointer">
-              {uploading ? 'Uploading...' : 'Replace file'}
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls,.json,.tsv"
-                onChange={handleFileChange}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
-          </div>
+    <div className="flex flex-col h-full min-h-0">
+      {/* Header row */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h1 className="text-base font-medium">Data</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {currentDataset.original_filename} · {currentDataset.row_count} rows · {currentDataset.column_count} columns
+          </p>
         </div>
 
-        {error && (
-          <div className="mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-            {error}
-          </div>
-        )}
-
-        <div className="bg-white border border-gray-200 rounded-md p-3.5 mb-4">
-          <div className="text-xs font-medium mb-2">Columns</div>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(currentDataset.columns_info).map(([col, dtype]) => (
-              <div
-                key={col}
-                className="inline-flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-md px-2 py-1"
-              >
-                <span className="text-xs font-medium text-gray-800">{col}</span>
-                <span className="text-[10px] text-gray-500">{dtype}</span>
-              </div>
-            ))}
-          </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setSyntheticOpen(true)}
+            className="bg-white border border-gray-200 hover:border-brand-400 rounded-md px-3 py-1.5 text-xs text-brand-700 font-medium"
+          >
+            ✦ Generate synthetic
+          </button>
+          <label className="bg-white border border-gray-200 hover:border-brand-400 rounded-md px-3 py-1.5 text-xs text-gray-700 cursor-pointer">
+            {uploading ? 'Uploading...' : 'Replace file'}
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls,.json,.tsv"
+              onChange={handleFileChange}
+              disabled={uploading}
+              className="hidden"
+            />
+          </label>
         </div>
+      </div>
 
-        {loadingPreview ? (
+      {error && (
+        <div className="mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* AI Overview replaces the old "Columns" chip bar */}
+      <AIOverview datasetId={currentDataset.id} />
+
+      {/* Table area — takes remaining vertical space and scrolls on its own */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {loadingPreview && !preview ? (
           <div className="text-sm text-gray-400 py-4">Loading preview...</div>
         ) : preview ? (
-          <div>
-            <DataTable columns={preview.columns} rows={preview.rows} />
+          <>
+            <DataTable
+              columns={preview.columns}
+              rows={preview.rows}
+              profile={profile}
+              onColumnAction={handleColumnAction}
+              maxHeight="calc(100vh - 280px)"
+            />
             <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
               <div>
                 Page {preview.page} of {preview.total_pages} · {preview.total_rows} rows total
@@ -187,16 +233,49 @@ export default function DataView({ project, currentDataset, onUpload }) {
                 >Next</button>
               </div>
             </div>
-          </div>
+          </>
         ) : null}
       </div>
 
+      {/* Modals */}
       <SyntheticModal
         open={syntheticOpen}
         onClose={() => setSyntheticOpen(false)}
         projectId={project.id}
         onGenerated={handleSyntheticGenerated}
       />
-    </>
+
+      <RenameModal
+        open={renameCol !== null}
+        onClose={() => setRenameCol(null)}
+        title={`Rename column — ${renameCol || ''}`}
+        initialValue={renameCol || ''}
+        onSubmit={submitRename}
+      />
+
+      <TypeConvertModal
+        open={convertCol !== null}
+        onClose={() => setConvertCol(null)}
+        column={convertCol}
+        currentType={convertCol && profile ? profile[convertCol]?.dtype : ''}
+        onSubmit={submitConvert}
+      />
+
+      <ConfirmModal
+        open={deleteCol !== null}
+        onClose={() => setDeleteCol(null)}
+        title="Delete column?"
+        message={
+          <span>
+            This removes the column <strong>{deleteCol}</strong> from the
+            current dataset. The step is logged in the timeline so you
+            can roll it back.
+          </span>
+        }
+        confirmLabel="Delete column"
+        danger
+        onConfirm={submitDelete}
+      />
+    </div>
   )
 }

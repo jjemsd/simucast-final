@@ -30,3 +30,12 @@ export async function recommendTest(datasetId, question) {
   })
   return data
 }
+
+// Dataset-level summary used by the Overview panel in DataView.
+// Returns { summary, issues: [...], suggestions: [...] }.
+export async function getOverview(datasetId) {
+  const { data } = await client.get('/api/ai/overview', {
+    params: { dataset_id: datasetId },
+  })
+  return data
+}
