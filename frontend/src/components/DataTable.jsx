@@ -120,7 +120,9 @@ export default function DataTable({
 
         <tbody>
           {rows.map((row, rowIdx) => (
-            <tr key={rowIdx} className="hover:bg-gray-50">
+            // `group` lets the sticky first-column cell pick up the row
+            // hover state via group-hover:*.
+            <tr key={rowIdx} className="group hover:bg-gray-50">
               {columns.map((col, idx) => {
                 const isFirst = idx === 0
                 return (
@@ -130,6 +132,8 @@ export default function DataTable({
                       'px-3 py-2 border-b border-gray-100 whitespace-nowrap text-gray-700 ' +
                       // Sticky first column — needs its own background
                       // colour so scrolling content behind it is hidden.
+                      // The group-hover rule keeps it matched to the
+                      // row's hover highlight.
                       (isFirst
                         ? 'sticky left-0 z-10 bg-white group-hover:bg-gray-50'
                         : '')

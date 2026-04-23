@@ -33,6 +33,92 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
 
+/* ----------------------------------------------------------------------------
+   Dark-mode fallbacks for Tailwind utility classes.
+   ----------------------------------------------------------------------------
+   Phase A/B pages already use explicit `dark:` variants (e.g.
+   `bg-white dark:bg-gray-900`). Those win because Tailwind outputs the
+   `dark:` rule after the base utility, and both selectors tie on specificity.
+
+   Phase C components and the older workspace views (DataView, CleanView,
+   StatsView, ...) were written without `dark:` variants — there are 20+ of
+   them, so rather than patch every file we override the common light
+   utility classes here. An element like `<div class="bg-white
+   border-gray-200">` automatically becomes dark when <html> has class
+   "dark".
+
+   These rules are INTENTIONALLY scoped under `html.dark` so they don't
+   affect the light theme. Colour scales used below correspond to Tailwind's
+   gray-* and red-* palettes.
+
+   If a specific component reads wrong in dark mode, the right fix is to
+   add an explicit `dark:` variant in its JSX — that will override these
+   fallbacks because `dark:` variants are emitted later in the stylesheet
+   and tie-break on source order.
+   ---------------------------------------------------------------------- */
+
+/* Backgrounds — white → gray-900, gray-50/100 → gray-800. */
+html.dark .bg-white        { background-color: #111827; }
+html.dark .bg-stone-50     { background-color: #0B1220; }
+html.dark .bg-gray-50      { background-color: #1F2937; }
+html.dark .bg-gray-100     { background-color: #1F2937; }
+
+/* Borders — 100/200 → gray-800, 300 → gray-700. */
+html.dark .border-gray-100 { border-color: #1F2937; }
+html.dark .border-gray-200 { border-color: #1F2937; }
+html.dark .border-gray-300 { border-color: #374151; }
+
+/* Text — shift gray levels up so they stay readable on dark bg. */
+html.dark .text-gray-300   { color: #D1D5DB; }
+html.dark .text-gray-400   { color: #9CA3AF; }
+html.dark .text-gray-500   { color: #9CA3AF; }
+html.dark .text-gray-600   { color: #D1D5DB; }
+html.dark .text-gray-700   { color: #E5E7EB; }
+html.dark .text-gray-800   { color: #F3F4F6; }
+html.dark .text-gray-900   { color: #F9FAFB; }
+
+/* Hover states that default to light grey become too bright in dark
+   mode — anchor them back to the dark palette. Tailwind escapes the
+   colon in the class name, which is why we need the backslash. */
+html.dark .hover\:bg-gray-50:hover  { background-color: #1F2937; }
+html.dark .hover\:bg-gray-100:hover { background-color: #374151; }
+html.dark .hover\:bg-red-50:hover   { background-color: rgba(127, 29, 29, 0.3); }
+html.dark .group:hover .group-hover\:bg-gray-50 { background-color: #1F2937; }
+
+/* Error/notice backgrounds — keep the hue but drop the luminance. */
+html.dark .bg-red-50       { background-color: rgba(127, 29, 29, 0.3); }
+html.dark .border-red-200  { border-color: #991B1B; }
+html.dark .text-red-700    { color: #FCA5A5; }
+
+/* Soft yellow/orange/blue tints used by the AIOverview issue badges
+   and a few cards. Keeping them legible without rewriting each badge. */
+html.dark .bg-yellow-100   { background-color: rgba(180, 83, 9, 0.25); }
+html.dark .text-yellow-800 { color: #FDE68A; }
+html.dark .bg-orange-100   { background-color: rgba(154, 52, 18, 0.25); }
+html.dark .text-orange-800 { color: #FED7AA; }
+html.dark .bg-blue-100     { background-color: rgba(30, 64, 175, 0.25); }
+html.dark .text-blue-700   { color: #BFDBFE; }
+
+/* Inputs/textareas/selects — inherit the shell's colour scheme so the
+   cursor stays visible and placeholder text isn't almost-black-on-black.
+   The :not() chain excludes widget-style inputs (checkbox/radio/file)
+   because the browser renders those natively and they look wrong when
+   you paint a dark background over them. */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]),
+html.dark textarea,
+html.dark select {
+  background-color: #111827;
+  color: #E5E7EB;
+  border-color: #374151;
+}
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #6B7280;
+}
+
+/* Code chips in popovers. */
+html.dark code { color: #E5E7EB; }
+
 /* Thin scrollbars everywhere (optional nice-to-have) */
 ::-webkit-scrollbar {
   width: 8px;
