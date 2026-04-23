@@ -26,6 +26,10 @@ import pandas as pd
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from sklearn.ensemble import (
+    RandomForestClassifier, RandomForestRegressor,
+    GradientBoostingClassifier, GradientBoostingRegressor,
+)
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
@@ -379,6 +383,156 @@ def train_decision_tree(project, dataset, target, features, max_depth=5, test_si
         model_type="decision_tree",
         metrics=metrics,
         step_title=title,
+    )
+    _update_step_target(step, target)
+    return step
+
+
+# ============================================================================
+# Random forest (classifier OR regressor depending on target)
+# ============================================================================
+
+def _classification_metrics(y_test, y_pred, y_proba, classes):
+    """Shared metrics bundle for any classifier (binary or multiclass)."""
+    out = {
+        "accuracy":  round(float(accuracy_score(y_test, y_pred)), 4),
+        "f1":        round(float(f1_score(y_test, y_pred, average="weighted", zero_division=0)), 4),
+        "precision": round(float(precision_score(y_test, y_pred, average="weighted", zero_division=0)), 4),
+        "recall":    round(float(recall_score(y_test, y_pred, average="weighted", zero_division=0)), 4),
+        "confusion_matrix": confusion_matrix(y_test, y_pred).tolist(),
+        "class_labels":     [str(c) for c in classes],
+    }
+    # ROC AUC only makes sense for binary with predict_proba available.
+    if len(classes) == 2 and y_proba is not None:
+        out["roc_auc"] = round(float(roc_auc_score(y_test, y_proba)), 4)
+    return out
+
+
+def _regression_metrics(y_test, y_pred):
+    return {
+        "r2_test":   round(float(r2_score(y_test, y_pred)), 4),
+        "rmse_test": round(float(np.sqrt(mean_squared_error(y_test, y_pred))), 4),
+        "mae_test":  round(float(mean_absolute_error(y_test, y_pred)), 4),
+    }
+
+
+def _feature_importance_list(features_encoded, importances):
+    return [
+        {"feature": f, "value": round(float(v), 4)}
+        for f, v in zip(features_encoded, importances)
+    ]
+
+
+def train_random_forest(project, dataset, target, features, n_estimators=100, max_depth=None, test_size=0.2):
+    """
+    Random forest. Auto-picks classifier vs regressor based on target type.
+
+    n_estimators: number of trees in the forest (more trees = slower but
+                  usually slightly more accurate; 100 is a good default).
+    max_depth:    per-tree depth cap. None lets them grow unrestricted
+                  (which is fine for a forest — averaging across trees
+                  controls overfitting).
+    """
+    df = data_service.load_dataframe(dataset)
+    prep = _prepare_data(df, target, features)
+
+    # Trees/forests don't need feature scaling.
+    X_train, X_test, y_train, y_test = train_test_split(
+        prep["X"], prep["y"], test_size=test_size, random_state=42,
+    )
+
+    if prep["target_type"] == "continuous":
+        model = RandomForestRegressor(
+            n_estimators=n_estimators, max_depth=max_depth, random_state=42, n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        metrics = {
+            **_regression_metrics(y_test, y_pred),
+            "n_estimators": n_estimators,
+            "feature_importances": _feature_importance_list(
+                prep["features_encoded"], model.feature_importances_
+            ),
+        }
+        title = f"Random forest regressor for {target} (R²={metrics['r2_test']})"
+    else:
+        model = RandomForestClassifier(
+            n_estimators=n_estimators, max_depth=max_depth, random_state=42, n_jobs=-1,
+        )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        y_proba = model.predict_proba(X_test)[:, 1] if len(model.classes_) == 2 else None
+        metrics = {
+            **_classification_metrics(y_test, y_pred, y_proba, model.classes_),
+            "n_estimators": n_estimators,
+            "feature_importances": _feature_importance_list(
+                prep["features_encoded"], model.feature_importances_
+            ),
+        }
+        title = f"Random forest classifier for {target} (accuracy={metrics['accuracy']})"
+
+    step = _save_model(
+        project, dataset, prep, model, scaler=None,
+        model_type="random_forest", metrics=metrics, step_title=title,
+    )
+    _update_step_target(step, target)
+    return step
+
+
+# ============================================================================
+# Gradient boosting (classifier OR regressor)
+# ============================================================================
+
+def train_gradient_boosting(project, dataset, target, features, n_estimators=100, learning_rate=0.1, max_depth=3, test_size=0.2):
+    """
+    Gradient-boosted trees. Usually the strongest off-the-shelf model on
+    tabular data, but it's sequential so it's a bit slower to train and
+    more prone to overfitting if max_depth is large.
+    """
+    df = data_service.load_dataframe(dataset)
+    prep = _prepare_data(df, target, features)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        prep["X"], prep["y"], test_size=test_size, random_state=42,
+    )
+
+    if prep["target_type"] == "continuous":
+        model = GradientBoostingRegressor(
+            n_estimators=n_estimators, learning_rate=learning_rate,
+            max_depth=max_depth, random_state=42,
+        )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        metrics = {
+            **_regression_metrics(y_test, y_pred),
+            "n_estimators": n_estimators,
+            "learning_rate": learning_rate,
+            "feature_importances": _feature_importance_list(
+                prep["features_encoded"], model.feature_importances_
+            ),
+        }
+        title = f"Gradient boosting regressor for {target} (R²={metrics['r2_test']})"
+    else:
+        model = GradientBoostingClassifier(
+            n_estimators=n_estimators, learning_rate=learning_rate,
+            max_depth=max_depth, random_state=42,
+        )
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        y_proba = model.predict_proba(X_test)[:, 1] if len(model.classes_) == 2 else None
+        metrics = {
+            **_classification_metrics(y_test, y_pred, y_proba, model.classes_),
+            "n_estimators": n_estimators,
+            "learning_rate": learning_rate,
+            "feature_importances": _feature_importance_list(
+                prep["features_encoded"], model.feature_importances_
+            ),
+        }
+        title = f"Gradient boosting classifier for {target} (accuracy={metrics['accuracy']})"
+
+    step = _save_model(
+        project, dataset, prep, model, scaler=None,
+        model_type="gradient_boosting", metrics=metrics, step_title=title,
     )
     _update_step_target(step, target)
     return step

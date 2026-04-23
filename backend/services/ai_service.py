@@ -207,6 +207,195 @@ def overview(dataset, profile):
         return {"summary": raw, "issues": [], "suggestions": []}
 
 
+def suggestions(dataset, profile, module):
+    """
+    Per-module contextual "what should the user do next" card.
+
+    Claude gets a compact profile digest + the module the user is on,
+    and returns 2-4 actionable suggestions. Each suggestion has:
+      - title: short headline
+      - description: one-sentence why
+      - module: which module it belongs to (echoed back)
+      - action: optional machine-readable hint the UI can use to pre-fill
+                a form ("fill_missing", "run_ttest", "train_logistic", etc.)
+      - params: optional dict with columns / strategy / etc.
+    """
+    _ensure_client()
+
+    # Digest the profile: column: dtype, null count, numeric range or top values.
+    digest_lines = []
+    for col, stats in profile.get("columns", {}).items():
+        parts = [f"type={stats['dtype']}"]
+        if stats["null_count"] > 0:
+            parts.append(f"nulls={stats['null_count']}")
+        if stats.get("numeric"):
+            nm = stats["numeric"]
+            parts.append(f"range=[{nm['min']}..{nm['max']}]")
+        elif stats.get("categorical") and stats["categorical"].get("top_values"):
+            top = stats["categorical"]["top_values"][:3]
+            parts.append(
+                "values=" + ",".join(f"{t['value']}({t['count']})" for t in top)
+            )
+        digest_lines.append(f"- {col}: {', '.join(parts)}")
+    digest = "\n".join(digest_lines) or "(no columns)"
+
+    # Per-module system prompt tweaks — keeps the output focused.
+    module_hints = {
+        "data":  "Focus on data quality: missing values, mixed types, suspect columns.",
+        "clean": "Suggest specific cleaning operations: fill missing, remove outliers, drop columns, convert types.",
+        "expand":"Suggest derived columns the user could compute (ratios, z-scores, bins, combinations).",
+        "stats": "Suggest which descriptive statistics (descriptives, frequencies, normality) to compute on which columns.",
+        "tests": "Recommend appropriate hypothesis tests (t-test, chi-square, correlation) with specific columns.",
+        "model": "Recommend which model types are appropriate given the target types available, and which features to use.",
+    }
+    hint = module_hints.get(module, module_hints["data"])
+
+    system_prompt = (
+        "You are SimuCast's built-in analyst. Given a dataset profile and "
+        f"the user's current module ({module}), return 2-4 concrete, "
+        "actionable suggestions. " + hint + " "
+        "Respond ONLY with a JSON object of this exact shape:\n"
+        '{"suggestions": [{"title": "...", "description": "...", '
+        '"module": "' + module + '", "action": "...", "params": {...}}]}\n'
+        "'action' and 'params' are optional hints — leave them out when "
+        "the advice is purely conceptual. Keep descriptions to one short "
+        "sentence each. No markdown, no code fences."
+    )
+
+    user_message = (
+        f"Dataset: {dataset.original_filename}\n"
+        f"Rows: {profile.get('row_count', '?')}, Cols: {profile.get('column_count', '?')}\n\n"
+        f"Column profile:\n{digest}\n"
+    )
+
+    response = _client.messages.create(
+        model=Config.CLAUDE_MODEL,
+        max_tokens=800,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    raw = response.content[0].text.strip()
+    try:
+        parsed = json.loads(raw)
+        return {"suggestions": parsed.get("suggestions", [])}
+    except json.JSONDecodeError:
+        return {"suggestions": [{"title": "AI output", "description": raw, "module": module}]}
+
+
+def explain_step(step):
+    """
+    One-paragraph plain-English 'why this happened' for a Timeline step.
+    Uses the step's title + details (so no dataset load needed).
+    """
+    _ensure_client()
+
+    details_str = json.dumps(json.loads(step.details) if step.details else {}, indent=2)
+
+    system_prompt = (
+        "You explain data-pipeline steps in plain English for students. "
+        "Given the title and details of ONE step, write 1-3 short sentences "
+        "covering: what happened, why a user might want this, and anything "
+        "they should double-check next. Avoid jargon. No markdown."
+    )
+
+    user_message = (
+        f"Step type: {step.step_type}\n"
+        f"Title: {step.title}\n"
+        f"Details (JSON): {details_str}\n\n"
+        "Explain this step."
+    )
+
+    response = _client.messages.create(
+        model=Config.CLAUDE_MODEL,
+        max_tokens=250,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return response.content[0].text.strip()
+
+
+def suggest_column_name(source_columns, operation, description=None):
+    """
+    Given source columns and an operation, propose a snake_case name for
+    the new column. Used by the ✦ Suggest name buttons in ExpandView.
+    """
+    _ensure_client()
+
+    system_prompt = (
+        "You pick concise snake_case column names for derived data "
+        "columns. Respond ONLY with the name — no quotes, no explanation, "
+        "no code fences. Max 40 characters. Lowercase, underscores only."
+    )
+
+    parts = [f"Source columns: {', '.join(source_columns)}"]
+    parts.append(f"Operation: {operation}")
+    if description:
+        parts.append(f"Context: {description}")
+    user_message = "\n".join(parts) + "\n\nSuggest a column name."
+
+    response = _client.messages.create(
+        model=Config.CLAUDE_MODEL,
+        max_tokens=40,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    # Defensive cleanup: strip punctuation the model might add anyway.
+    name = response.content[0].text.strip()
+    name = name.split("\n")[0].strip().strip('"\'` ')
+    return name[:60]
+
+
+def suggest_model_features(dataset, profile, target):
+    """
+    Given the target column, return the list of feature columns Claude
+    recommends plus a one-sentence reason. Used by the 'Select
+    recommended' button in ModelView.
+    """
+    _ensure_client()
+
+    digest_lines = []
+    for col, stats in profile.get("columns", {}).items():
+        if col == target:
+            continue
+        parts = [f"type={stats['dtype']}"]
+        if stats["null_count"] > 0:
+            parts.append(f"nulls={stats['null_count']}")
+        if stats.get("categorical") and stats["categorical"].get("unique_count") is not None:
+            parts.append(f"unique={stats['categorical']['unique_count']}")
+        digest_lines.append(f"- {col}: {', '.join(parts)}")
+    digest = "\n".join(digest_lines) or "(no columns)"
+
+    system_prompt = (
+        "You pick predictive features for a machine-learning model. "
+        "Given a target column and a list of candidate columns, return "
+        "JSON with the columns that are most likely to be useful features. "
+        "Exclude identifiers (ids, emails, free-text), near-empty columns, "
+        "and anything that would leak the target. "
+        "Respond ONLY with:\n"
+        '{"features": ["...", "..."], "reasoning": "..."}'
+    )
+
+    user_message = (
+        f"Target: {target}\n\n"
+        f"Candidate columns:\n{digest}\n\n"
+        "Which columns should be used as features?"
+    )
+
+    response = _client.messages.create(
+        model=Config.CLAUDE_MODEL,
+        max_tokens=400,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    raw = response.content[0].text.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"features": [], "reasoning": raw}
+
+
 def recommend_test(dataset, question):
     """
     Given a dataset and a plain-English question, recommend the right test.

@@ -226,6 +226,12 @@ class Step(db.Model):
     # (so users can see the history of what they did).
     reverted = db.Column(db.Boolean, default=False)
 
+    # Optional AI-generated "why" paragraph. Lazily filled in by the
+    # /api/ai/explain-step endpoint — either automatically right after the
+    # step runs (when the user's auto-explain preference is on) or
+    # on-demand when the user clicks "Explain" in the Timeline.
+    reasoning = db.Column(db.Text)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -237,5 +243,6 @@ class Step(db.Model):
             "details": json.loads(self.details) if self.details else {},
             "order_index": self.order_index,
             "reverted": self.reverted,
+            "reasoning": self.reasoning,
             "created_at": self.created_at.isoformat(),
         }
