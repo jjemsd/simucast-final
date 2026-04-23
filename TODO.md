@@ -9,18 +9,16 @@
   header/first column, column header menu for rename / change type /
   delete, hover popover with per-column stats, AI Overview replacing
   the old "Columns" chip bar) — **DONE**.
+- Phase D (dark mode across the project workspace) — **DONE** via a
+  fallback CSS block in `index.css` that paints `bg-white`,
+  `border-gray-*`, `text-gray-*`, common hover states and text
+  inputs/selects/textareas when `html.dark` is set. Explicit `dark:`
+  utilities already in Phase A/B pages continue to win because
+  Tailwind emits them after the base utilities. If a specific
+  workspace component reads wrong, add an explicit `dark:` variant on
+  that element — it overrides the fallback.
 
 Everything below is still open.
-
-## Phase D — Dark mode across the project workspace
-
-Phase A styled the shell; the workspace views (DataView, CleanView,
-StatsView, TestsView, ModelView, WhatIfView, ReportView, IconSidebar,
-AIChat, Timeline, DataTable, ChartCard, StatCard, TopBar,
-SyntheticModal, new components from Phase C — ColumnProfilePopover,
-ColumnHeaderMenu, TypeConvertModal, AIOverview) still use plain
-`bg-white` etc. Pass through adding `dark:` variants on backgrounds,
-borders, and text. No logic changes.
 
 ## Nice-to-haves
 
