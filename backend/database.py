@@ -90,3 +90,13 @@ def run_migrations():
 
     if orphan_datasets:
         db.session.commit()
+
+    # --- Step 3: add steps.reasoning column if it doesn't exist ------------
+    # Phase E: the Timeline can show an AI-generated "why" per step; we
+    # persist that text here so it isn't regenerated every time the user
+    # opens the Timeline drawer.
+    step_columns = {c["name"] for c in inspector.get_columns("steps")}
+    if "reasoning" not in step_columns:
+        with db.engine.connect() as conn:
+            conn.execute(text("ALTER TABLE steps ADD COLUMN reasoning TEXT"))
+            conn.commit()

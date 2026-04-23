@@ -39,3 +39,43 @@ export async function getOverview(datasetId) {
   })
   return data
 }
+
+// Module-aware "what should I do next" panel. module is one of
+// 'data' | 'clean' | 'expand' | 'stats' | 'tests' | 'model'.
+// Returns { suggestions: [{ title, description, module, action?, params? }] }.
+export async function getSuggestions(datasetId, module) {
+  const { data } = await client.get('/api/ai/suggestions', {
+    params: { dataset_id: datasetId, module },
+  })
+  return data
+}
+
+// AI-generated reasoning for a single Timeline step. Cached server-side
+// so repeat calls are free. Pass force=true to regenerate.
+export async function explainStep(stepId, force = false) {
+  const { data } = await client.post('/api/ai/explain-step', {
+    step_id: stepId,
+    force,
+  })
+  return data  // { reasoning, cached }
+}
+
+// Ask Claude to pick a snake_case name for a derived column.
+export async function suggestColumnName(sourceColumns, operation, description = null) {
+  const { data } = await client.post('/api/ai/suggest-column-name', {
+    source_columns: sourceColumns,
+    operation,
+    description,
+  })
+  return data.name
+}
+
+// Ask Claude to pick model features given a target column.
+// Returns { features: [...], reasoning }.
+export async function suggestModelFeatures(datasetId, target) {
+  const { data } = await client.post('/api/ai/suggest-model-features', {
+    dataset_id: datasetId,
+    target,
+  })
+  return data
+}

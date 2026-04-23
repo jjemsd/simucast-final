@@ -12,11 +12,10 @@
 - Phase D (dark mode across the project workspace) — **DONE** via a
   fallback CSS block in `index.css` that paints `bg-white`,
   `border-gray-*`, `text-gray-*`, common hover states and text
-  inputs/selects/textareas when `html.dark` is set. Explicit `dark:`
-  utilities already in Phase A/B pages continue to win because
-  Tailwind emits them after the base utilities. If a specific
-  workspace component reads wrong, add an explicit `dark:` variant on
-  that element — it overrides the fallback.
+  inputs/selects/textareas when `html.dark` is set.
+- Phase E (cohesion pass from panel feedback) — **BACKEND + API
+  WRAPPERS DONE**; frontend UI still pending. Full task handoff in
+  [`PHASE_E_HANDOFF.md`](./PHASE_E_HANDOFF.md).
 
 Everything below is still open.
 
