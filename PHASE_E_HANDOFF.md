@@ -40,19 +40,22 @@ wire-up, Model overhaul, Timeline reasoning, Settings toggle) is
 
 ### How each bullet maps to the task plan below
 
-| Panel ask | Phase E task |
+The "What lands" column is the full intended scope per ask. ✅ marks
+pieces already shipped in the backend + API-wrapper commit on this
+branch; unmarked rows are the frontend UI work laid out in E.1–E.6.
+
+| Panel ask | What lands |
 |---|---|
-| Cleaned data visible on Data page / merged into it | E.1 `CurrentDatasetBar` — persistent preview on every view |
-| Cleaned data exportable | E.1 — Export button on the bar (uses `/api/data/:id/export` that already exists) |
-| AI auto-suggests what to do on the Data page | E.2 `AISuggestions` + the existing `AIOverview` on Data |
-| Merged columns get proper names (AI-assisted) | E.4 ✦ Suggest name buttons in ExpandView; backend `suggest_column_name` already shipped |
-| Expand changes reflect in preview | E.3 — `CurrentDatasetBar` on ExpandView refreshes after each op (existing `onChange` already refreshes the dataset) |
-| Stats + Tests AI recommendations | E.3 — `AISuggestions` on StatsView / TestsView with `module=stats\|tests`; backend already returns module-aware suggestions |
-| Model transparency — step-by-step | E.5 Pipeline preview card in ModelView |
-| More models + comparison | E.5 — multi-select + comparison table; backend `forest` + `gbm` endpoints already shipped |
-| "Select all" for features | E.5 — Select all checkbox |
-| Feature importance with column contents | E.5 — mini-badges next to each feature (top values or numeric range) |
-| Reasoning at every step, user informed | E.6 Timeline reasoning via `explain-step` endpoint (already shipped); user-controlled toggle `autoExplainSteps` |
+| Cleaned data visible after cleaning / merged into the Data page | `CurrentDatasetBar` mounted in every view. Export button lives there too, so "current dataset export" works from any tab. Clean tab doesn't need its own preview — it gets the shared one. (E.1, E.3) |
+| AI auto-explains on the Data page | New `AISuggestions` component (module-aware). Replaces "open chat → ask" with "here's what to try, one click to apply". ✅ backend `GET /api/ai/suggestions?dataset_id=X&module=Y` already shipped. (E.2, E.3) |
+| Merged columns get a real name | Merge/compute flow prompts for a name. Add a ✦ **Suggest name** button that asks Claude for a snake_case label based on the source columns + operation. ✅ backend `POST /api/ai/suggest-column-name` already shipped. (E.4) |
+| Expand preview reflects changes | Same fix as Clean — shared preview via `CurrentDatasetBar`. Expand operations already push steps to the Timeline (existing); after Phase E those steps also get AI reasoning. (E.3, E.6) |
+| Stats / Tests AI recommendations | `AISuggestions` on those views produces concrete recommendations ("run a t-test on income grouped by gender"). Each suggestion carries an optional `action` + `params` — clicking Apply prefills the target form. (E.2, E.3) |
+| Model step-by-step transparency | **Before training**: a Pipeline preview card — "will standardize `age`/`income`, one-hot encode `gender`, then fit …" (static rules, no AI needed). **During**: per-model progress ticks. **After**: existing AI interpret endpoint explains results. (E.5) |
+| More models + comparison | ✅ Random forest + gradient boosting shipped server-side (auto-dispatch classifier vs regressor). Frontend work: allow multi-select in the training form; when >1 model is picked, show a comparison table (accuracy / precision / recall / F1 / ROC-AUC for classification; R² / RMSE / MAE for regression; one row per model, best-in-column highlighted). (E.5) |
+| "Select all" for features | Checkbox + "exclude target column" toggle, plus a ✦ **Select recommended** button driven by ✅ `POST /api/ai/suggest-model-features` (already shipped). (E.5) |
+| Feature importance with column contents | Next to each bar, a small badge: top 3 values for categoricals, min / mean / max for numerics. (Sparklines were the original spec; mini-badges are the student-friendly minimum. Upgrade later if desired.) Column info comes from the already-shipped `GET /api/data/:id/profile`. (E.5) |
+| Reasoning at every step | ✅ Optional `Step.reasoning` column + `POST /api/ai/explain-step` already shipped, with server-side caching (second call returns `cached: true` instantly). Frontend work: expandable Timeline rows with an "Explain" button, plus a `UserPrefs.autoExplainSteps` toggle in Settings that auto-runs the endpoint for every un-explained step when the Timeline opens. (E.6) |
 
 ---
 
