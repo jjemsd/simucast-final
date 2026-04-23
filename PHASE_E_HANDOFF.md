@@ -5,6 +5,57 @@ Backend + frontend API wrappers are landed on branch
 wire-up, Model overhaul, Timeline reasoning, Settings toggle) is
 **still to do** — this doc captures everything the next session needs.
 
+## Source: panelist feedback (verbatim)
+
+> I think we need to change the UI, workflow to make everything cohesive.
+>
+> * After data cleaning, the data should be visible again (if possible,
+>   on the data page, just merge it into the data page)
+>   - the cleaned data should be exportable
+>
+> * On the AI assistant if possible, the explanations. Auto generate on
+>   what can be done with the data on the data page.
+>
+> * Merged Columns — become unnamed, so if possible they can be named
+>   anyway, could be using ai assistant too.
+>
+> * In expanded data, the same thing as need to be visible on the data.
+>   Every time there are changes it reflects in the preview.
+>
+> * Stats page and T-tests, if so recommend based on the data what can
+>   be done via ai assistant or anyway.
+>
+> * Model, also, I think they want here is the step by step that the
+>   models will do?
+>   - it needs to be transparent about what needs to be done with the
+>     data like if standardization is needed or whatever then explain
+>     (via AI maybe hahahaha)
+>   - just add more models, and if multiple models are recommended,
+>     the evaluated metrics can be compared
+>   - the idea of select all in the selection of features hahahaha
+>   - The feature importance, the contents of the columns are included
+>
+> • there are reasonings at every step, and the user is informed about
+>   what happened/is happening
+
+### How each bullet maps to the task plan below
+
+| Panel ask | Phase E task |
+|---|---|
+| Cleaned data visible on Data page / merged into it | E.1 `CurrentDatasetBar` — persistent preview on every view |
+| Cleaned data exportable | E.1 — Export button on the bar (uses `/api/data/:id/export` that already exists) |
+| AI auto-suggests what to do on the Data page | E.2 `AISuggestions` + the existing `AIOverview` on Data |
+| Merged columns get proper names (AI-assisted) | E.4 ✦ Suggest name buttons in ExpandView; backend `suggest_column_name` already shipped |
+| Expand changes reflect in preview | E.3 — `CurrentDatasetBar` on ExpandView refreshes after each op (existing `onChange` already refreshes the dataset) |
+| Stats + Tests AI recommendations | E.3 — `AISuggestions` on StatsView / TestsView with `module=stats\|tests`; backend already returns module-aware suggestions |
+| Model transparency — step-by-step | E.5 Pipeline preview card in ModelView |
+| More models + comparison | E.5 — multi-select + comparison table; backend `forest` + `gbm` endpoints already shipped |
+| "Select all" for features | E.5 — Select all checkbox |
+| Feature importance with column contents | E.5 — mini-badges next to each feature (top values or numeric range) |
+| Reasoning at every step, user informed | E.6 Timeline reasoning via `explain-step` endpoint (already shipped); user-controlled toggle `autoExplainSteps` |
+
+---
+
 ## Decisions already made (from the last conversation)
 
 | # | Question | Answer |
