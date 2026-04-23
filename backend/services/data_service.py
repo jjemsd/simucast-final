@@ -135,6 +135,97 @@ def load_dataframe(dataset):
     return reader(dataset.storage_path)
 
 
+def profile_column(series):
+    """
+    Compute a short summary of one column. Shape:
+      {
+        "dtype": "int64" | "object" | ...,
+        "null_count": int,
+        "non_null_count": int,
+        "error_count": int,   # values that don't match the declared dtype
+        "numeric": {           # only present for numeric columns
+          "sum", "mean", "min", "max", "std"
+        } | None,
+        "categorical": {       # only present when low-cardinality text
+          "unique_count": int,
+          "top_values": [ {"value": ..., "count": int}, ... ]  # up to 8
+        } | None,
+      }
+    """
+    import numpy as np
+
+    n = len(series)
+    null_count = int(series.isna().sum())
+    non_null_count = n - null_count
+
+    out = {
+        "dtype": str(series.dtype),
+        "null_count": null_count,
+        "non_null_count": non_null_count,
+        "error_count": 0,
+        "numeric": None,
+        "categorical": None,
+    }
+
+    if non_null_count == 0:
+        return out
+
+    if pd.api.types.is_numeric_dtype(series):
+        clean = series.dropna()
+        def _safe(x):
+            # Keep JSON-friendly — round floats and convert numpy scalars.
+            if isinstance(x, (np.floating, float)):
+                return round(float(x), 4)
+            return int(x) if isinstance(x, (np.integer,)) else x
+        out["numeric"] = {
+            "sum": _safe(clean.sum()),
+            "mean": _safe(clean.mean()),
+            "min": _safe(clean.min()),
+            "max": _safe(clean.max()),
+            "std": _safe(clean.std()) if len(clean) > 1 else 0,
+        }
+        return out
+
+    # Object / string columns — try two things:
+    # 1) Detect "mixed type" errors: if most values parse as numbers,
+    #    flag the few that don't as errors.
+    # 2) If cardinality is low, return a frequency table (categorical).
+    non_null = series.dropna().astype(str)
+    parsed = pd.to_numeric(non_null, errors="coerce")
+    numeric_share = parsed.notna().sum() / max(1, len(non_null))
+
+    if numeric_share >= 0.8 and numeric_share < 1.0:
+        # Predominantly numeric with a few offenders.
+        out["error_count"] = int((parsed.isna()).sum())
+
+    unique_count = int(non_null.nunique())
+    out["categorical"] = {
+        "unique_count": unique_count,
+        "top_values": [],
+    }
+    # Only show the frequency table when cardinality is low — otherwise
+    # it's just noise (e.g. 500 unique customer IDs).
+    if unique_count <= 50:
+        top = non_null.value_counts().head(8)
+        out["categorical"]["top_values"] = [
+            {"value": str(v), "count": int(c)} for v, c in top.items()
+        ]
+    return out
+
+
+def build_profile(dataset):
+    """
+    Run profile_column on every column and return the dataset-level dict
+    the UI consumes.
+    """
+    df = load_dataframe(dataset)
+    return {
+        "row_count": len(df),
+        "column_count": len(df.columns),
+        "columns": {col: profile_column(df[col]) for col in df.columns},
+    }
+
+
 def get_preview(dataset, page=1, per_page=50):
     """
     Return a paginated slice of the dataset for the frontend data grid.

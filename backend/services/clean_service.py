@@ -248,6 +248,132 @@ def delete_columns(project, dataset, columns):
     )
 
 
+def rename_column(project, dataset, old_name, new_name):
+    """Rename a single column. Fails if the name already exists."""
+    df = data_service.load_dataframe(dataset)
+
+    if old_name not in df.columns:
+        raise ValueError(f"Column '{old_name}' not found")
+    if not new_name or not new_name.strip():
+        raise ValueError("New column name cannot be empty")
+
+    new_name = new_name.strip()
+    if new_name == old_name:
+        # No-op — but treat as success so the UI can close the modal.
+        return _save_cleaned_dataset(
+            project, dataset, df,
+            step_type="rename_column",
+            step_title=f"Renamed '{old_name}' (no change)",
+            step_details={"old_name": old_name, "new_name": new_name},
+        )
+
+    if new_name in df.columns:
+        raise ValueError(f"Column '{new_name}' already exists")
+
+    df = df.rename(columns={old_name: new_name})
+
+    return _save_cleaned_dataset(
+        project, dataset, df,
+        step_type="rename_column",
+        step_title=f"Renamed '{old_name}' → '{new_name}'",
+        step_details={"old_name": old_name, "new_name": new_name},
+    )
+
+
+# Maps the simple type names the UI offers to a pandas coercion strategy.
+# Each entry returns (converted_series, error_count) — where error_count
+# is the number of non-null values that failed to coerce.
+def _coerce_column(series, target_type, date_format=None):
+    """
+    Convert a pandas Series to the requested logical type, counting any
+    values that couldn't be coerced.
+
+    target_type: one of 'str', 'int', 'float', 'date', 'bool'.
+    date_format: optional strftime pattern for 'date' (None = auto-parse).
+    """
+    original_non_null = series.notna().sum()
+
+    if target_type == "str":
+        # Convert everything to string; NaN stays NaN (so the column is
+        # still nullable in pandas).
+        converted = series.astype("object").where(series.notna(), other=pd.NA)
+        converted = converted.apply(lambda v: str(v) if pd.notna(v) else v)
+        return converted, 0
+
+    if target_type == "int":
+        # to_numeric with errors='coerce' turns unparseable values into NaN.
+        numeric = pd.to_numeric(series, errors="coerce")
+        new_nulls = numeric.isna().sum() - series.isna().sum()
+        # pandas' nullable Int64 keeps NaN support for int columns.
+        try:
+            converted = numeric.round().astype("Int64")
+        except Exception:
+            converted = numeric
+        return converted, int(max(0, new_nulls))
+
+    if target_type == "float":
+        numeric = pd.to_numeric(series, errors="coerce")
+        new_nulls = numeric.isna().sum() - series.isna().sum()
+        return numeric.astype("float64"), int(max(0, new_nulls))
+
+    if target_type == "date":
+        dt = pd.to_datetime(series, errors="coerce", format=date_format) \
+            if date_format else pd.to_datetime(series, errors="coerce")
+        new_nulls = dt.isna().sum() - series.isna().sum()
+        return dt, int(max(0, new_nulls))
+
+    if target_type == "bool":
+        # Accept common truthy/falsy spellings; anything else → NaN.
+        truthy = {"true", "t", "yes", "y", "1", "1.0"}
+        falsy = {"false", "f", "no", "n", "0", "0.0"}
+
+        def _to_bool(v):
+            if pd.isna(v):
+                return pd.NA
+            s = str(v).strip().lower()
+            if s in truthy:
+                return True
+            if s in falsy:
+                return False
+            return pd.NA
+
+        converted = series.apply(_to_bool).astype("boolean")
+        new_nulls = converted.isna().sum() - series.isna().sum()
+        return converted, int(max(0, new_nulls))
+
+    raise ValueError(f"Unknown target type '{target_type}'")
+
+
+def convert_column_type(project, dataset, column, target_type, date_format=None):
+    """
+    Convert one column to a different logical type. Values that can't be
+    coerced become null and are counted as 'errors' in the step details.
+    """
+    df = data_service.load_dataframe(dataset)
+
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found")
+
+    converted, error_count = _coerce_column(df[column], target_type, date_format)
+    df[column] = converted
+
+    title = f"Converted '{column}' → {target_type}"
+    if error_count:
+        title += f" ({error_count} failed)"
+
+    return _save_cleaned_dataset(
+        project, dataset, df,
+        step_type="convert_type",
+        step_title=title,
+        step_details={
+            "column": column,
+            "target_type": target_type,
+            "date_format": date_format,
+            "error_count": error_count,
+        },
+    )
+
+
 def deduplicate(project, dataset, subset=None):
     """
     Remove exact duplicate rows.

@@ -129,6 +129,84 @@ def interpret(analysis_type, result):
     return response.content[0].text
 
 
+def overview(dataset, profile):
+    """
+    Summarise the state of a dataset and suggest cleanup actions.
+
+    Arguments:
+        dataset: the Dataset model (for filename / dimensions)
+        profile: output of data_service.build_profile() — a dict of
+                 per-column stats. We send this to Claude instead of the
+                 raw rows, keeping the prompt small.
+
+    Returns a dict:
+        {
+          "summary": "One sentence describing overall data health.",
+          "issues": [
+            {"column": "...", "type": "nulls|errors|mixed|...",
+             "description": "..."},
+            ...
+          ],
+          "suggestions": ["...", "..."]
+        }
+    """
+    _ensure_client()
+
+    # Pre-process the profile into a short, token-friendly digest so we
+    # don't blow the context window on 100-column datasets. Only include
+    # columns that actually have something worth reporting.
+    digest_lines = []
+    for col, stats in profile.get("columns", {}).items():
+        parts = [f"type={stats['dtype']}"]
+        if stats["null_count"] > 0:
+            parts.append(f"nulls={stats['null_count']}")
+        if stats["error_count"] > 0:
+            parts.append(f"errors={stats['error_count']}")
+        if stats.get("categorical") and stats["categorical"].get("top_values"):
+            top = stats["categorical"]["top_values"][:3]
+            parts.append(
+                "top=" + ", ".join(f"{t['value']}({t['count']})" for t in top)
+            )
+        if stats.get("numeric"):
+            nm = stats["numeric"]
+            parts.append(f"range=[{nm['min']}..{nm['max']}]")
+        digest_lines.append(f"- {col}: {', '.join(parts)}")
+
+    digest = "\n".join(digest_lines) or "(no columns)"
+
+    system_prompt = (
+        "You are a data-quality reviewer. Given a profile of a dataset, "
+        "you return JSON describing its state and what to do next. "
+        "Respond ONLY with a JSON object in this exact shape:\n"
+        '{"summary": "...", "issues": [{"column": "...", '
+        '"type": "nulls|errors|mixed|low_variance|other", '
+        '"description": "..."}], "suggestions": ["..."]}\n'
+        "Keep the summary to one sentence. List up to 6 issues and up to "
+        "5 suggestions. No markdown, no code fences, no other text."
+    )
+
+    user_message = (
+        f"Dataset: {dataset.original_filename}\n"
+        f"Rows: {profile.get('row_count', '?')} | "
+        f"Columns: {profile.get('column_count', '?')}\n\n"
+        f"Column profile:\n{digest}\n\n"
+        "Review this dataset."
+    )
+
+    response = _client.messages.create(
+        model=Config.CLAUDE_MODEL,
+        max_tokens=800,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+    )
+
+    raw = response.content[0].text.strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {"summary": raw, "issues": [], "suggestions": []}
+
+
 def recommend_test(dataset, question):
     """
     Given a dataset and a plain-English question, recommend the right test.

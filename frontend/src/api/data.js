@@ -25,5 +25,12 @@ export async function previewDataset(datasetId, page = 1, perPage = 50) {
   return data
 }
 
+// Per-column stats used by the hover popover and the AI Overview.
+// Computes nulls, numeric summary, categorical frequencies, error counts.
+export async function getProfile(datasetId) {
+  const { data } = await client.get(`/api/data/${datasetId}/profile`)
+  return data
+}
+
 // (Phase B removed the legacy listAllDatasets / exportDatasetUrl helpers.
 // The Files page now talks to api/files.js instead.)

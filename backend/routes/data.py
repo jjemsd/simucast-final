@@ -69,6 +69,22 @@ def upload(project_id):
     return jsonify({"dataset": dataset.to_dict()}), 201
 
 
+@bp.route("/<int:dataset_id>/profile", methods=["GET"])
+@login_required
+def profile(dataset_id):
+    """
+    GET /api/data/<dataset_id>/profile
+    Per-column statistics (dtype, nulls, numeric summary, categorical
+    frequencies, error count). Used by the hover popover and the AI
+    Overview panel.
+    """
+    dataset = Dataset.query.get(dataset_id)
+    if not dataset or dataset.project.user_id != current_user.id:
+        return jsonify({"error": "Dataset not found"}), 404
+
+    return jsonify(data_service.build_profile(dataset))
+
+
 @bp.route("/<int:dataset_id>/preview", methods=["GET"])
 @login_required
 def preview(dataset_id):
