@@ -14,10 +14,19 @@
   `border-gray-*`, `text-gray-*`, common hover states and text
   inputs/selects/textareas when `html.dark` is set.
 - Phase E (cohesion pass from panel feedback) — **BACKEND + API
-  WRAPPERS DONE**; frontend UI still pending. Full task handoff in
-  [`PHASE_E_HANDOFF.md`](./PHASE_E_HANDOFF.md).
+  WRAPPERS DONE**. Frontend UI is superseded by Phase F (below) —
+  the Phase E API wrappers land in the new F views.
+- Phase F (Axion-style redesign, SimuCast orange retained) —
+  **PLANNED**. Full task plan in
+  [`PHASE_F_PLAN.md`](./PHASE_F_PLAN.md). Covers: design-system
+  primitives, variable roles, workflow locks, Clean-card UI,
+  Advanced module (k-means + PCA), Models overhaul with comparison
+  table, live What-if, toggle-based auto-report.
+- [`PHASE_E_HANDOFF.md`](./PHASE_E_HANDOFF.md) is kept as a
+  reference for the backend/API surface already committed — its
+  frontend task list is **superseded** by Phase F.
 
-Everything below is still open.
+Everything below is still open (nice-to-haves, not part of Phase F).
 
 ## Nice-to-haves
 

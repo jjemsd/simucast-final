@@ -1,9 +1,70 @@
 # Phase E handoff
 
+> **Superseded by [`PHASE_F_PLAN.md`](./PHASE_F_PLAN.md) for the
+> frontend UI.** The backend endpoints and API wrappers listed below
+> are already committed on branch `claude/deploy-to-production-0kQw7`
+> and are reused by Phase F. The frontend task list here
+> (`CurrentDatasetBar`, `AISuggestions` panels in each view, Timeline
+> reasoning, etc.) is absorbed into Phase F's view rewrites — use
+> the Phase F plan as the single source of truth going forward.
+
 Backend + frontend API wrappers are landed on branch
-`claude/deploy-to-production-0kQw7`. Frontend UI (components, view
-wire-up, Model overhaul, Timeline reasoning, Settings toggle) is
-**still to do** — this doc captures everything the next session needs.
+`claude/deploy-to-production-0kQw7`. Frontend UI was originally
+planned here but now lives in Phase F.
+
+## Source: panelist feedback (verbatim)
+
+> I think we need to change the UI, workflow to make everything cohesive.
+>
+> * After data cleaning, the data should be visible again (if possible,
+>   on the data page, just merge it into the data page)
+>   - the cleaned data should be exportable
+>
+> * On the AI assistant if possible, the explanations. Auto generate on
+>   what can be done with the data on the data page.
+>
+> * Merged Columns — become unnamed, so if possible they can be named
+>   anyway, could be using ai assistant too.
+>
+> * In expanded data, the same thing as need to be visible on the data.
+>   Every time there are changes it reflects in the preview.
+>
+> * Stats page and T-tests, if so recommend based on the data what can
+>   be done via ai assistant or anyway.
+>
+> * Model, also, I think they want here is the step by step that the
+>   models will do?
+>   - it needs to be transparent about what needs to be done with the
+>     data like if standardization is needed or whatever then explain
+>     (via AI maybe hahahaha)
+>   - just add more models, and if multiple models are recommended,
+>     the evaluated metrics can be compared
+>   - the idea of select all in the selection of features hahahaha
+>   - The feature importance, the contents of the columns are included
+>
+> • there are reasonings at every step, and the user is informed about
+>   what happened/is happening
+
+### How each bullet maps to the task plan below
+
+The "What lands" column is the full intended scope per ask. ✅ marks
+pieces already shipped in the backend + API-wrapper commit on this
+branch; unmarked rows are the frontend UI work laid out in E.1–E.6.
+
+| Panel ask | What lands |
+|---|---|
+| Cleaned data visible after cleaning / merged into the Data page | `CurrentDatasetBar` mounted in every view. Export button lives there too, so "current dataset export" works from any tab. Clean tab doesn't need its own preview — it gets the shared one. (E.1, E.3) |
+| AI auto-explains on the Data page | New `AISuggestions` component (module-aware). Replaces "open chat → ask" with "here's what to try, one click to apply". ✅ backend `GET /api/ai/suggestions?dataset_id=X&module=Y` already shipped. (E.2, E.3) |
+| Merged columns get a real name | Merge/compute flow prompts for a name. Add a ✦ **Suggest name** button that asks Claude for a snake_case label based on the source columns + operation. ✅ backend `POST /api/ai/suggest-column-name` already shipped. (E.4) |
+| Expand preview reflects changes | Same fix as Clean — shared preview via `CurrentDatasetBar`. Expand operations already push steps to the Timeline (existing); after Phase E those steps also get AI reasoning. (E.3, E.6) |
+| Stats / Tests AI recommendations | `AISuggestions` on those views produces concrete recommendations ("run a t-test on income grouped by gender"). Each suggestion carries an optional `action` + `params` — clicking Apply prefills the target form. (E.2, E.3) |
+| Model step-by-step transparency | **Before training**: a Pipeline preview card — "will standardize `age`/`income`, one-hot encode `gender`, then fit …" (static rules, no AI needed). **During**: per-model progress ticks. **After**: existing AI interpret endpoint explains results. (E.5) |
+| More models + comparison | ✅ Random forest + gradient boosting shipped server-side (auto-dispatch classifier vs regressor). Frontend work: allow multi-select in the training form; when >1 model is picked, show a comparison table (accuracy / precision / recall / F1 / ROC-AUC for classification; R² / RMSE / MAE for regression; one row per model, best-in-column highlighted). (E.5) |
+| "Select all" for features | Checkbox + "exclude target column" toggle, plus a ✦ **Select recommended** button driven by ✅ `POST /api/ai/suggest-model-features` (already shipped). (E.5) |
+| Feature importance with column contents | Next to each bar, a small badge: top 3 values for categoricals, min / mean / max for numerics. (Sparklines were the original spec; mini-badges are the student-friendly minimum. Upgrade later if desired.) Column info comes from the already-shipped `GET /api/data/:id/profile`. (E.5) |
+| Reasoning at every step | ✅ Optional `Step.reasoning` column + `POST /api/ai/explain-step` already shipped, with server-side caching (second call returns `cached: true` instantly). Frontend work: expandable Timeline rows with an "Explain" button, plus a `UserPrefs.autoExplainSteps` toggle in Settings that auto-runs the endpoint for every un-explained step when the Timeline opens. (E.6) |
+
+---
 
 ## Decisions already made (from the last conversation)
 
