@@ -1,9 +1,16 @@
 # Phase E handoff
 
+> **Superseded by [`PHASE_F_PLAN.md`](./PHASE_F_PLAN.md) for the
+> frontend UI.** The backend endpoints and API wrappers listed below
+> are already committed on branch `claude/deploy-to-production-0kQw7`
+> and are reused by Phase F. The frontend task list here
+> (`CurrentDatasetBar`, `AISuggestions` panels in each view, Timeline
+> reasoning, etc.) is absorbed into Phase F's view rewrites — use
+> the Phase F plan as the single source of truth going forward.
+
 Backend + frontend API wrappers are landed on branch
-`claude/deploy-to-production-0kQw7`. Frontend UI (components, view
-wire-up, Model overhaul, Timeline reasoning, Settings toggle) is
-**still to do** — this doc captures everything the next session needs.
+`claude/deploy-to-production-0kQw7`. Frontend UI was originally
+planned here but now lives in Phase F.
 
 ## Source: panelist feedback (verbatim)
 
